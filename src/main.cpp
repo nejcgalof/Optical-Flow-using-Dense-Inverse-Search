@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
+#include "optical_flow.hpp"
 
 using namespace cv;
 
@@ -139,14 +140,39 @@ int main(int argc, char** argv )
 	ConstructImgPyramide(img_bo_fmat, img_bo_fmat_pyr, img_bo_dx_fmat_pyr, img_bo_dy_fmat_pyr, img_bo_pyr, img_bo_dx_pyr, img_bo_dy_pyr, lv_f, lv_l, true, patchsz, padw, padh);
 
 
+	// Run optical flow algorithm
+	float sc_fct = pow(2, lv_l);
+	cv::Mat flowout(sz.height / sc_fct, sz.width / sc_fct, CV_32FC2); // Optical Flow
+
+	
+	OFC::OFClass ofc(img_ao_pyr, img_ao_dx_pyr, img_ao_dy_pyr,
+		img_bo_pyr, img_bo_dx_pyr, img_bo_dy_pyr,
+		patchsz,  // extra image padding to avoid border violation check
+		(float*)flowout.data,   // pointer to n-band output float array
+		nullptr,  // pointer to n-band input float array of size of first (coarsest) scale, pass as nullptr to disable
+		sz.width, sz.height,
+		lv_f, lv_l, maxiter, miniter, mindprate, mindrrate, minimgerr, patchsz, poverl,
+		usefbcon, costfct, 1, patnorm,
+		usetvref, tv_alpha, tv_gamma, tv_delta, tv_innerit, tv_solverit, tv_sor);
+
+	// Resize to original scale, if not run to finest level
+	if (lv_l != 0)
+	{
+		flowout *= sc_fct;
+		cv::resize(flowout, flowout, cv::Size(), sc_fct, sc_fct, cv::INTER_LINEAR);
+	}
+	// If image was padded, remove padding before saving to file
+	flowout = flowout(cv::Rect((int)floor((float)padw / 2.0f), (int)floor((float)padh / 2.0f), width_org, height_org));
+	//imshow("flowout", flowout);
 	imshow("Display Image1", img_ao_mat);
+	/*imshow("Display Image1", img_ao_mat);
 	imshow("Display Image2", img_bo_mat);
 	imshow("pyr ao 1", img_ao_fmat_pyr[0]);
 	//imshow("pyr ao 2", img_ao_fmat_pyr[1]);
 	imshow("pyr aodx 1", img_ao_dx_fmat_pyr[0]);
 	//imshow("pyr aodx 2", img_ao_dx_fmat_pyr[1]);
 	imshow("pyr aody 1", img_ao_dy_fmat_pyr[0]);
-	//imshow("pyr aody 2", img_ao_dy_fmat_pyr[1]);
+	//imshow("pyr aody 2", img_ao_dy_fmat_pyr[1]);*/
     waitKey(0);
 
     return 0;
