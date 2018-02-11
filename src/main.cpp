@@ -1,7 +1,9 @@
 #include <iostream>
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
-#include "optical_flow.hpp"
+#include <optical_flow.hpp>
+#include <color_coding.hpp>
+#include <IO_flow.hpp>
 
 using namespace cv;
 
@@ -51,6 +53,7 @@ void ConstructImgPyramide(cv::Mat & img_ao_fmat, vector<Mat> & img_ao_fmat_pyr, 
 
 int main(int argc, char** argv )
 {
+
     /*if ( argc != 2 )
     {
         printf("usage: DisplayImage.out <Image_Path>\n");
@@ -72,7 +75,14 @@ int main(int argc, char** argv )
         printf("No image data \n");
         return -1;
     }
+	cv::Mat flowinit;
+	flowinit.create(img_ao_mat.size().height, img_ao_mat.size().width, CV_32FC2);
+	ReadFlowFile(flowinit, "frame_0001.flo");
+	Mat dst;
+	draw_optical_flow(flowinit, dst);
+	SaveFlowFile(flowinit, "frame_0002.flo");
 
+	imshow("flowinit", dst);
 	// PARAMETERS
 	cv::Size sz = img_ao_mat.size();
 	int width_org = sz.width;   // unpadded original image size
