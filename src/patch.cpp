@@ -193,32 +193,13 @@ namespace OFC
 			*te = (float*)tmpin->data(),
 			*pw = (float*)wdest->data();
 
-		if (op->costfct == 0) // L2 cost function
+
+		for (int i = op->novals / 4; i--; ++pd, ++pa, ++te, ++pw)
 		{
-			for (int i = op->novals / 4; i--; ++pd, ++pa, ++te, ++pw)
-			{
-				(*pd) = (*pa) - (*te);  // difference image
-				//(*pw) = __builtin_ia32_andnps(op->negzero, (*pd));
-				/*
-				r0 := ~a0 & b0
-				r1 := ~a1 & b1
-				r2 := ~a2 & b2
-				r3 := ~a3 & b3
-				*/
-				/*for (int la = 0; la < 4; la++) {
-					unsigned char *ngz = reinterpret_cast<unsigned char *>(op->negzero);
-					unsigned char *pd2 = reinterpret_cast<unsigned char *>(pd);
-					pw[la] = ~ ngz[la] & pd2[la];
-				}*/
-				unsigned char *ngz = reinterpret_cast<unsigned char *>(op->negzero);
-				unsigned char *pd2 = reinterpret_cast<unsigned char *>(pd);
-				*pw = ~(*ngz & *pd2);
-				//_mm256_store_ps(pw, _mm256_andnot_ps(_mm256_load_ps(op->negzero), _mm256_load_ps(pd)));
-				//_mm256_store_ps(pw, _mm256_andnot_ps(_mm256_load_ps( op->negzero),_mm256_load_ps(pd)));
-			}
-		}
-		else {
-			std::cout << "not implement" << std::endl;
+			(*pd) = (*pa) - (*te);  // difference image
+			unsigned char *ngz = reinterpret_cast<unsigned char *>(op->negzero);
+			unsigned char *pd2 = reinterpret_cast<unsigned char *>(pd);
+			*pw = ~(*ngz & *pd2);
 		}
 	}
 

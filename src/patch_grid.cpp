@@ -26,8 +26,8 @@ namespace OFC
 		steps = op->steps;
 		nopw = ceil((float)cpt->width / (float)steps);
 		noph = ceil((float)cpt->height / (float)steps);
-		const int offsetw = floor((cpt->width - (nopw - 1)*steps) / 2);
-		const int offseth = floor((cpt->height - (noph - 1)*steps) / 2);
+		int offsetw = floor((cpt->width - (nopw - 1)*steps) / 2);
+		int offseth = floor((cpt->height - (noph - 1)*steps) / 2);
 
 		nopatches = nopw*noph;
 		pt_ref.resize(nopatches);
@@ -174,7 +174,6 @@ namespace OFC
 
 	void PatGridClass::InitializeFromCoarserOF(const float * flow_prev)
 	{
-#pragma omp parallel for schedule(dynamic,10)
 		for (int ip = 0; ip < nopatches; ++ip)
 		{
 			int x = floor(pt_ref[ip][0] / 2); // better, but slower: use bil. interpolation here
@@ -190,7 +189,7 @@ namespace OFC
 	{
 		float* we = new float[cpt->width * cpt->height];
 
-		memset(flowout, 0, sizeof(float) * (op->nop * cpt->width * cpt->height));
+		memset(flowout, 0, sizeof(float) * (2 * cpt->width * cpt->height));
 		memset(we, 0, sizeof(float) * (cpt->width * cpt->height));
 
 		for (int ip = 0; ip < nopatches; ++ip)

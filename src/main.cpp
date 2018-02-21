@@ -8,7 +8,7 @@
 using namespace cv;
 
 
-void ConstructImgPyramide(cv::Mat & img_ao_fmat, cv::Mat * img_ao_fmat_pyr, cv::Mat * img_ao_dx_fmat_pyr, cv::Mat * img_ao_dy_fmat_pyr, float** img_ao_pyr, float** img_ao_dx_pyr, float** img_ao_dy_pyr, int lv_f, int lv_l, bool getgrad, int imgpadding, int padw, int padh)
+void ConstructImgPyramide(cv::Mat & img_ao_fmat, cv::Mat * img_ao_fmat_pyr, cv::Mat * img_ao_dx_fmat_pyr, cv::Mat * img_ao_dy_fmat_pyr,float** img_ao_pyr, float** img_ao_dx_pyr, float** img_ao_dy_pyr, int lv_f, int lv_l, bool getgrad, int imgpadding, int padw, int padh)
 {
 	for (int i = 0; i <= lv_f; ++i)  // Construct image and gradient pyramides
 	{
@@ -96,17 +96,16 @@ int main(int argc, char** argv )
 	
 	// PARAMETERS
 
-	int maxiter = 64; // Max. iterations
-	int miniter = 64; // Min. iterations
+	int maxiter = 16; // Max. iterations
+	int miniter = 16; // Min. iterations
 	float mindprate = 0.05; // Early stopping parameters
 	float mindrrate = 0.95; // Early stopping parameters
 	float minimgerr = 0.0; // Early stopping parameters
 	int patchsz = 8; // Rectangular patch size in (pixel)
-	int lv_f = std::max(0, (int)std::floor(log2((2.0f*(float)width_org) / ((float)95 * (float)patchsz)))); // Coarsest scale in multi-scale pyramid
+	int lv_f = std::max(0, (int)std::floor(log2((2.0f*(float)width_org) / ((float)20 * (float)patchsz)))); // Coarsest scale in multi-scale pyramid
 	int lv_l = std::max(lv_f - 2, 0); // Finest scale in multi-scale pyramide
 	float poverl = 0.3; // Patch overlap on each scale (percent)
 	int patnorm = 1; // Mean - normalize patches
-	int costfct = 0; // Cost function (here: 0/L2)  Alternatives: 1/L1, 2/Huber, 10/NCC
 
 	// Add border for divisible for all scales
 	int padw = 0, padh = 0;
@@ -148,19 +147,18 @@ int main(int argc, char** argv )
 	ConstructImgPyramide(img_ao_fmat, img_ao_fmat_pyr, img_ao_dx_fmat_pyr, img_ao_dy_fmat_pyr, &img_ao_pyr, &img_ao_dx_pyr, &img_ao_dy_pyr, lv_f, lv_l, true, patchsz, padw, padh);
 	ConstructImgPyramide(img_bo_fmat, img_bo_fmat_pyr, img_bo_dx_fmat_pyr, img_bo_dy_fmat_pyr, &img_bo_pyr, &img_bo_dx_pyr, &img_bo_dy_pyr, lv_f, lv_l, true, patchsz, padw, padh);
 
-
 	// Run optical flow algorithm
 	float sc_fct = pow(2, lv_l);
 	cv::Mat flowout(sz.height / sc_fct, sz.width / sc_fct, CV_32FC2); // Optical Flow
 
-	
+
 	OFC::OFClass ofc(&img_ao_pyr, &img_ao_dx_pyr, &img_ao_dy_pyr,
 		&img_bo_pyr, &img_bo_dx_pyr, &img_bo_dy_pyr,
 		patchsz,  // extra image padding to avoid border violation check
 		(float*)flowout.data,   // pointer to n-band output float array
 		nullptr,  // pointer to n-band input float array of size of first (coarsest) scale, pass as nullptr to disable
 		sz.width, sz.height,
-		lv_f, lv_l, maxiter, miniter, mindprate, mindrrate, minimgerr, patchsz, poverl, costfct, 1, patnorm);
+		lv_f, lv_l, maxiter, miniter, mindprate, mindrrate, minimgerr, patchsz, poverl, patnorm);
 
 	// Resize to original scale, if not run to finest level
 	if (lv_l != 0)
@@ -174,16 +172,6 @@ int main(int argc, char** argv )
 	Mat dst2;
 	draw_optical_flow(flowout, dst2);
 	imshow("MOJE", dst2);
-	//imshow("flowout", flowout);
-	//imshow("Display Image1", img_ao_mat);
-	/*imshow("Display Image1", img_ao_mat);
-	imshow("Display Image2", img_bo_mat);
-	imshow("pyr ao 1", img_ao_fmat_pyr[0]);
-	//imshow("pyr ao 2", img_ao_fmat_pyr[1]);
-	imshow("pyr aodx 1", img_ao_dx_fmat_pyr[0]);
-	//imshow("pyr aodx 2", img_ao_dx_fmat_pyr[1]);
-	imshow("pyr aody 1", img_ao_dy_fmat_pyr[0]);
-	//imshow("pyr aody 2", img_ao_dy_fmat_pyr[1]);*/
     waitKey(0);
 
     return 0;

@@ -1,6 +1,11 @@
 #pragma once
 #include <vector>
+#include <opencv2/opencv.hpp>
+#include <Eigen/Core>
+#include <Eigen/LU>
+#include <Eigen/Dense>
 using namespace std;
+using namespace cv;
 
 namespace OFC
 {
@@ -34,12 +39,10 @@ namespace OFC
 		int costfct;          // Cost function: 0: L2-Norm, 1: L1-Norm, 2: PseudoHuber-Norm 
 
 							  // Automatically set parameters / fixed parameters
-		int nop;                      // number of parameters per pixel, 1 for depth, 2 for optical flow, 4 for scene flow
 		float patove;                 // point/line padding to all sides (px)
 		float outlierthresh;          // displacement threshold (in px) before a patch is flagged as outlier
 		int steps;                    // horizontal and vertical distance (in px) between patch centers
 		int novals;                   // number of points in patch (=p_samp_s*p_samp_s) 
-		int noc;                      // number of channels in image and gradients 
 		int noscales;                 // total number of scales
 		float minerrval = 2.0f;       // 1/max(this, error) for pixel averaging weight
 		float normoutlier = 5.0f;     // norm error threshold for huber norm
@@ -78,14 +81,12 @@ namespace OFC
 			const float res_thresh_in,
 			const int padval_in,
 			const float patove_in,
-			const int costfct_in,
-			const int noc_in,
 			const int patnorm_in);
 
 	private:
 
 		// needed for verbosity >= 3, DISVISUAL
-		//void DisplayDrawPatchBoundary(cv::Mat img, const Eigen::Vector2f pt, const float sc);
+		void DisplayDrawPatchBoundary(cv::Mat img, Eigen::Vector2f pt, float sc);
 
 		float ** im_ao, ** im_ao_dx, ** im_ao_dy;
 		float ** im_bo, ** im_bo_dx, ** im_bo_dy;

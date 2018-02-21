@@ -4,13 +4,15 @@
 #include <Eigen/LU>
 #include <Eigen/Dense>
 
-#include <stdio.h>  
+#include <stdio.h>
+#include <opencv2/opencv.hpp>
 
 #include "optical_flow.hpp"
 #include "patch_grid.hpp"
 
 
 using namespace std;
+using namespace cv;
 
 namespace OFC
 {
@@ -31,13 +33,10 @@ namespace OFC
 		const float res_thresh_in,
 		const int p_samp_s_in,
 		const float patove_in,
-		const int costfct_in,
-		const int noc_in,
 		const int patnorm_in)
 		: im_ao(im_ao_in), im_ao_dx(im_ao_dx_in), im_ao_dy(im_ao_dy_in),
 		im_bo(im_bo_in), im_bo_dx(im_bo_dx_in), im_bo_dy(im_bo_dy_in)
 	{
-		op.nop = 2;
 		op.p_samp_s = p_samp_s_in;  // patch has even border length, center pixel is at (p_samp_s/2, p_samp_s/2) (ZERO INDEXED!) 
 		op.outlierthresh = (float)op.p_samp_s / 2;
 		op.patove = patove_in;
@@ -49,9 +48,7 @@ namespace OFC
 		op.dr_thresh = dr_thresh_in;
 		op.res_thresh = res_thresh_in;
 		op.steps = 2;// std::max(1, (int)floor(op.p_samp_s*(1 - op.patove)));
-		op.novals = noc_in * (p_samp_s_in)*(p_samp_s_in);
-		op.costfct = costfct_in;
-		op.noc = noc_in;
+		op.novals = (p_samp_s_in)*(p_samp_s_in);
 		op.patnorm = patnorm_in;
 		op.noscales = op.sc_f - op.sc_l + 1;
 		op.normoutlier_tmpbsq = new float[4]{ op.normoutlier*op.normoutlier, op.normoutlier*op.normoutlier, op.normoutlier*op.normoutlier, op.normoutlier*op.normoutlier };
@@ -62,9 +59,7 @@ namespace OFC
 
 		// Create grids on each scale
 		vector<OFC::PatGridClass*> grid_fw(op.noscales);
-		vector<OFC::PatGridClass*> grid_bw(op.noscales); // grid for backward OF computation, only needed if 'usefbcon' is set to 1.
 		vector<float*> flow_fw(op.noscales);
-		vector<float*> flow_bw(op.noscales);
 		cpl.resize(op.noscales);
 		cpr.resize(op.noscales);
 		for (int sl = op.sc_f; sl >= op.sc_l; --sl)
@@ -88,7 +83,7 @@ namespace OFC
 			cpr[i] = cpl[i];
 			cpr[i].camlr = 1;
 
-			flow_fw[i] = new float[op.nop * cpl[i].width * cpl[i].height];
+			flow_fw[i] = new float[2 * cpl[i].width * cpl[i].height];
 			grid_fw[i] = new OFC::PatGridClass(&(cpl[i]), &(cpr[i]), &op);
 		}
 		// *** Main loop; Operate over scales, coarse-to-fine
@@ -121,7 +116,35 @@ namespace OFC
 
 			grid_fw[ii]->AggregateFlowDense(tmp_ptr);
 
+			// Display Grid on current scale
+			float sc_fct_tmp = pow(2, sl); // upscale factor
+
+			cv::Mat src(cpl[ii].height + 2 * cpl[ii].imgpadding, cpl[ii].width + 2 * cpl[ii].imgpadding, CV_32FC1, (void*)im_ao[sl]);
+			cv::Mat img_ao_mat = src(cv::Rect(cpl[ii].imgpadding, cpl[ii].imgpadding, cpl[ii].width, cpl[ii].height));
+
+			cv::Mat outimg;
+			img_ao_mat.convertTo(outimg, CV_8UC1);
+			cv::cvtColor(outimg, outimg, CV_GRAY2RGB);
+			cv::resize(outimg, outimg, cv::Size(), sc_fct_tmp, sc_fct_tmp, cv::INTER_NEAREST);
+			for (int i = 0; i < grid_fw[ii]->GetNoPatches(); ++i)
+				DisplayDrawPatchBoundary(outimg, grid_fw[ii]->GetRefPatchPos(i), sc_fct_tmp);
+
+			for (int i = 0; i < grid_fw[ii]->GetNoPatches(); ++i)
+			{
+				// Show displacement vector
+				const Eigen::Vector2f pt_ref = grid_fw[ii]->GetRefPatchPos(i);
+				const Eigen::Vector2f pt_ret = grid_fw[ii]->GetQuePatchPos(i);
+
+				Eigen::Vector2f pta, ptb;
+				cv::line(outimg, cv::Point((pt_ref[0] + .5)*sc_fct_tmp, (pt_ref[1] + .5)*sc_fct_tmp), cv::Point((pt_ret[0] + .5)*sc_fct_tmp, (pt_ret[1] + .5)*sc_fct_tmp), cv::Scalar(0, 255, 0), 2);
+			}
+			cv::namedWindow("Img_ao", cv::WINDOW_AUTOSIZE);
+			cv::imshow("Img_ao", outimg);
+
+			cv::waitKey(30);
+			std::cout << "naprej" << std::endl;
 		}
+
 
 		// Clean up
 		for (int sl = op.sc_f; sl >= op.sc_l; --sl)
@@ -129,6 +152,19 @@ namespace OFC
 			delete[] flow_fw[sl - op.sc_l];
 			delete grid_fw[sl - op.sc_l];
 		}
+	}
+
+	void OFClass::DisplayDrawPatchBoundary(cv::Mat img, Eigen::Vector2f pt, float sc)
+	{
+		cv::line(img, cv::Point((pt[0] + .5)*sc, (pt[1] + .5)*sc), cv::Point((pt[0] + .5)*sc, (pt[1] + .5)*sc), cv::Scalar(0, 0, 255), 4);
+
+		float lb = -op.p_samp_s / 2;
+		float ub = op.p_samp_s / 2 - 1;
+
+		cv::line(img, cv::Point(((pt[0] + lb) + .5)*sc, ((pt[1] + lb) + .5)*sc), cv::Point(((pt[0] + ub) + .5)*sc, ((pt[1] + lb) + .5)*sc), cv::Scalar(0, 0, 255), 1);
+		cv::line(img, cv::Point(((pt[0] + ub) + .5)*sc, ((pt[1] + lb) + .5)*sc), cv::Point(((pt[0] + ub) + .5)*sc, ((pt[1] + ub) + .5)*sc), cv::Scalar(0, 0, 255), 1);
+		cv::line(img, cv::Point(((pt[0] + ub) + .5)*sc, ((pt[1] + ub) + .5)*sc), cv::Point(((pt[0] + lb) + .5)*sc, ((pt[1] + ub) + .5)*sc), cv::Scalar(0, 0, 255), 1);
+		cv::line(img, cv::Point(((pt[0] + lb) + .5)*sc, ((pt[1] + ub) + .5)*sc), cv::Point(((pt[0] + lb) + .5)*sc, ((pt[1] + lb) + .5)*sc), cv::Scalar(0, 0, 255), 1);
 	}
 }
 
