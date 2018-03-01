@@ -20,10 +20,6 @@ namespace OFC
 		Eigen::Vector2f pt_iter;
 		Eigen::Vector2f pt_st;
 
-		float delta_p_sqnorm = 1e-10;
-		float delta_p_sqnorm_init = 1e-10;
-		float mares = 1e20; // mares: Mean Absolute RESidual
-		float mares_old = 1e20;
 		int cnt = 0;
 		bool invalid = false;
 	} patchstate;
@@ -35,7 +31,6 @@ namespace OFC
 
 	public:
 		PatClass(const camparam* cpt_in,
-			const camparam* cpo_in,
 			const optparam* op_in,
 			const int patchid_in);
 
@@ -52,21 +47,17 @@ namespace OFC
 		inline const bool IsValid() const { return (!pc->invalid); }
 		inline const float * GetpWeightPtr() const { return (float*)pc->pweight.data(); } // Return data pointer to image error patch, used in efficient indexing for densification in patchgrid class
 
-		inline const Eigen::Vector2f*            GetParam()    const { return &(pc->p_iter); }   // get current iteration parameters
+		inline const Eigen::Vector2f* GetParam() const { return &(pc->p_iter); }   // get current iteration parameters
 
-		inline const Eigen::Vector2f*            GetParamStart() const { return &(pc->p_in); }
+		inline const Eigen::Vector2f* GetParamStart() const { return &(pc->p_in); }
 
 	private:
 
 		void OptimizeStart(const Eigen::Vector2f p_in_arg);
-
-		void OptimizeComputeErrImg();
 		void paramtopt();
 		void ResetPatch();
 		void ComputeHessian();
-		void CreateStatusStruct(patchstate * psin);
-		void LossComputeErrorImage(Eigen::Matrix<float, Eigen::Dynamic, 1>* patdest, Eigen::Matrix<float, Eigen::Dynamic, 1>* wdest, const Eigen::Matrix<float, Eigen::Dynamic, 1>* patin, const Eigen::Matrix<float, Eigen::Dynamic, 1>*  tmpin);
-
+		
 		// Extract patch on integer position, and gradients, No Bilinear interpolation
 		void getPatchStaticNNGrad(const float* img, const float* img_dx, const float* img_dy, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in, Eigen::Matrix<float, Eigen::Dynamic, 1>*  tmp_dx_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_dy_in);
 		// Extract patch on float position with bilinear interpolation, no gradients.  
@@ -81,7 +72,6 @@ namespace OFC
 		Eigen::Map<const Eigen::MatrixXf> * im_bo, *im_bo_dx, *im_bo_dy;
 
 		const camparam* cpt;
-		const camparam* cpo;
 		const optparam* op;
 		const int patchid;
 

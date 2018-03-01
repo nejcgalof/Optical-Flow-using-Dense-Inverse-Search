@@ -10,7 +10,6 @@ namespace OFC
 
 	public:
 		PatGridClass(const camparam* cpt_in,
-			const camparam* cpo_in,
 			const optparam* op_in);
 
 		~PatGridClass();

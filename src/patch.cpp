@@ -7,40 +7,29 @@
 #include <Eigen/Core>
 #include <Eigen/LU>
 #include <Eigen/Dense>
-
 #include <stdio.h>  
-
 #include "patch.hpp"
 
 using namespace std;
 
 namespace OFC
 {
-
 	PatClass::PatClass(
 		const camparam* cpt_in,
-		const camparam* cpo_in,
 		const optparam* op_in,
 		const int patchid_in)
 		:
 		cpt(cpt_in),
-		cpo(cpo_in),
 		op(op_in),
 		patchid(patchid_in)
 	{
 		pc = new patchstate;
-		CreateStatusStruct(pc);
+		pc->pdiff.resize(op->novals, 1);
+		pc->pweight.resize(op->novals, 1);
 
 		tmp.resize(op->novals, 1);
 		dxx_tmp.resize(op->novals, 1);
 		dyy_tmp.resize(op->novals, 1);
-	}
-
-	void PatClass::CreateStatusStruct(patchstate * psin)
-	{
-		// get reference / template patch
-		psin->pdiff.resize(op->novals, 1);
-		psin->pweight.resize(op->novals, 1);
 	}
 
 	PatClass::~PatClass()
@@ -96,10 +85,6 @@ namespace OFC
 		pc->p_iter.setZero();
 		pc->delta_p.setZero();
 
-		pc->delta_p_sqnorm = 1e-10;
-		pc->delta_p_sqnorm_init = 1e-10;
-		pc->mares = 1e20;
-		pc->mares_old = 1e20;
 		pc->cnt = 0;
 		pc->invalid = false;
 	}
@@ -126,13 +111,12 @@ namespace OFC
 		else
 		{
 			pc->cnt = 0; // reset iteration counter
-			pc->delta_p_sqnorm = 1e-10;
-			pc->delta_p_sqnorm_init = 1e-10;  // set to arbitrary low value, s.t. that loop condition is definitely true on first iteration
-			pc->mares = 1e5;          // mean absolute residual
-			pc->mares_old = 1e20; // for rate of change, keep mares from last iteration in here. Set high so that loop condition is definitely true on first iteration
 			pc->hasconverged = 0;
 
-			OptimizeComputeErrImg();
+			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->pdiff));
+			if ((pc->cnt > op->iterations)) {
+				pc->hasconverged = 1;
+			}
 
 			pc->hasoptstarted = 1;
 			pc->invalid = false;
@@ -176,52 +160,16 @@ namespace OFC
 				pc->hasoptstarted = 1;
 			}
 
-			OptimizeComputeErrImg();
+			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->pdiff));
+			if ((pc->cnt > op->iterations)) {
+				pc->hasconverged = 1;
+			}
 		}
 	}
 
 	inline void PatClass::paramtopt()
 	{  
 		pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
-
-	}
-
-	void PatClass::LossComputeErrorImage(Eigen::Matrix<float, Eigen::Dynamic, 1>* patdest, Eigen::Matrix<float, Eigen::Dynamic, 1>* wdest, const Eigen::Matrix<float, Eigen::Dynamic, 1>* patin, const Eigen::Matrix<float, Eigen::Dynamic, 1>*  tmpin)
-	{
-		float * pd = (float*)patdest->data(),
-			*pa = (float*)patin->data(),
-			*te = (float*)tmpin->data(),
-			*pw = (float*)wdest->data();
-
-
-		for (int i = op->novals / 4; i--; ++pd, ++pa, ++te, ++pw)
-		{
-			(*pd) = (*pa) - (*te);  // difference image
-			unsigned char *ngz = reinterpret_cast<unsigned char *>(op->negzero);
-			unsigned char *pd2 = reinterpret_cast<unsigned char *>(pd);
-			*pw = ~(*ngz & *pd2);
-		}
-	}
-
-	void PatClass::OptimizeComputeErrImg()
-	{
-		getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->pdiff));
-
-		// Get photometric patch error
-		LossComputeErrorImage(&pc->pdiff, &pc->pweight, &pc->pdiff, &tmp);
-
-		// Compute step norm
-		pc->delta_p_sqnorm = pc->delta_p.squaredNorm();
-		if (pc->cnt == 1)
-			pc->delta_p_sqnorm_init = pc->delta_p_sqnorm;
-
-		// Check early termination criterions
-		pc->mares_old = pc->mares;
-		pc->mares = pc->pweight.lpNorm<1>() / (op->novals);
-		if (!((pc->cnt < op->max_iter) &  (pc->mares  > op->res_thresh) &
-			((pc->cnt < op->min_iter) | (pc->delta_p_sqnorm / pc->delta_p_sqnorm_init >= op->dp_thresh)) &
-			((pc->cnt < op->min_iter) | (pc->mares / pc->mares_old <= op->dr_thresh))))
-			pc->hasconverged = 1;
 
 	}
 
@@ -262,7 +210,7 @@ namespace OFC
 		}
 
 		// PATCH NORMALIZATION
-		if (op->patnorm>0) // Subtract Mean
+		if (op->patnorm) // Subtract Mean
 			tmp_in_e->array() -= (tmp_in_e->sum() / op->novals);
 	}
 
@@ -315,7 +263,7 @@ namespace OFC
 			}
 		}
 		// PATCH NORMALIZATION
-		if (op->patnorm>0) // Subtract Mean
+		if (op->patnorm) // Subtract Mean
 			tmp_in_e->array() -= (tmp_in_e->sum() / op->novals);
 	}
 

@@ -7,14 +7,12 @@
 
 using namespace cv;
 
-
-void ConstructImgPyramide(cv::Mat & img_ao_fmat, cv::Mat * img_ao_fmat_pyr, cv::Mat * img_ao_dx_fmat_pyr, cv::Mat * img_ao_dy_fmat_pyr,float** img_ao_pyr, float** img_ao_dx_pyr, float** img_ao_dy_pyr, int lv_f, int lv_l, bool getgrad, int imgpadding, int padw, int padh)
+void construct_pyramide(cv::Mat & img_ao_fmat, cv::Mat * img_ao_fmat_pyr, cv::Mat * img_ao_dx_fmat_pyr, cv::Mat * img_ao_dy_fmat_pyr, float ** img_ao_pyr, float ** img_ao_dx_pyr, float ** img_ao_dy_pyr, int lv_f, int imgpadding)
 {
 	for (int i = 0; i <= lv_f; ++i)  // Construct image and gradient pyramides
 	{
-		if (i == 0) // At finest scale: copy directly, for all other: downscale previous scale by .5
+		if (i == 0) // At finest scale: copy directly
 		{
-			img_ao_fmat_pyr[i] = img_ao_fmat.clone();
 			cv::Mat dx, dy, dx2, dy2, dmag;
 			cv::Sobel(img_ao_fmat, dx, CV_32F, 1, 0, 3, 1 / 8.0, 0, cv::BORDER_DEFAULT);
 			cv::Sobel(img_ao_fmat, dy, CV_32F, 0, 1, 3, 1 / 8.0, 0, cv::BORDER_DEFAULT);
@@ -22,20 +20,19 @@ void ConstructImgPyramide(cv::Mat & img_ao_fmat, cv::Mat * img_ao_fmat_pyr, cv::
 			dy2 = dy.mul(dy);
 			dmag = dx2 + dy2;
 			cv::sqrt(dmag, dmag);
+			// Set magnitude in finnest scale
 			img_ao_fmat_pyr[i] = dmag.clone();
 		}
-		else
+		else { // for other: downscale previous scale by .5  - just downsize 
 			cv::resize(img_ao_fmat_pyr[i - 1], img_ao_fmat_pyr[i], cv::Size(), .5, .5, cv::INTER_LINEAR);
-
+		}
 		img_ao_fmat_pyr[i].convertTo(img_ao_fmat_pyr[i], CV_32FC1);
 
-		if (getgrad)
-		{
-			cv::Sobel(img_ao_fmat_pyr[i], img_ao_dx_fmat_pyr[i], CV_32F, 1, 0, 3, 1 / 8.0, 0, cv::BORDER_DEFAULT);
-			cv::Sobel(img_ao_fmat_pyr[i], img_ao_dy_fmat_pyr[i], CV_32F, 0, 1, 3, 1 / 8.0, 0, cv::BORDER_DEFAULT);
-			img_ao_dx_fmat_pyr[i].convertTo(img_ao_dx_fmat_pyr[i], CV_32F);
-			img_ao_dy_fmat_pyr[i].convertTo(img_ao_dy_fmat_pyr[i], CV_32F);
-		}
+		// Calculate gradient dx and dy
+		cv::Sobel(img_ao_fmat_pyr[i], img_ao_dx_fmat_pyr[i], CV_32F, 1, 0, 3, 1 / 8.0, 0, cv::BORDER_DEFAULT);
+		cv::Sobel(img_ao_fmat_pyr[i], img_ao_dy_fmat_pyr[i], CV_32F, 0, 1, 3, 1 / 8.0, 0, cv::BORDER_DEFAULT);
+		img_ao_dx_fmat_pyr[i].convertTo(img_ao_dx_fmat_pyr[i], CV_32F);
+		img_ao_dy_fmat_pyr[i].convertTo(img_ao_dy_fmat_pyr[i], CV_32F);
 	}
 
 	// pad images
@@ -43,15 +40,10 @@ void ConstructImgPyramide(cv::Mat & img_ao_fmat, cv::Mat * img_ao_fmat_pyr, cv::
 	{
 		copyMakeBorder(img_ao_fmat_pyr[i], img_ao_fmat_pyr[i], imgpadding, imgpadding, imgpadding, imgpadding, cv::BORDER_REPLICATE);  // Replicate border for image padding
 		img_ao_pyr[i] = (float*)img_ao_fmat_pyr[i].data;
-
-		if (getgrad)
-		{
-			copyMakeBorder(img_ao_dx_fmat_pyr[i], img_ao_dx_fmat_pyr[i], imgpadding, imgpadding, imgpadding, imgpadding, cv::BORDER_CONSTANT, 0); // Zero padding for gradients
-			copyMakeBorder(img_ao_dy_fmat_pyr[i], img_ao_dy_fmat_pyr[i], imgpadding, imgpadding, imgpadding, imgpadding, cv::BORDER_CONSTANT, 0);
-
-			img_ao_dx_pyr[i] = (float*)img_ao_dx_fmat_pyr[i].data;
-			img_ao_dy_pyr[i] = (float*)img_ao_dy_fmat_pyr[i].data;
-		}
+		copyMakeBorder(img_ao_dx_fmat_pyr[i], img_ao_dx_fmat_pyr[i], imgpadding, imgpadding, imgpadding, imgpadding, cv::BORDER_CONSTANT, 0); // Zero padding for gradients
+		img_ao_dx_pyr[i] = (float*)img_ao_dx_fmat_pyr[i].data;
+		copyMakeBorder(img_ao_dy_fmat_pyr[i], img_ao_dy_fmat_pyr[i], imgpadding, imgpadding, imgpadding, imgpadding, cv::BORDER_CONSTANT, 0);
+		img_ao_dy_pyr[i] = (float*)img_ao_dy_fmat_pyr[i].data;
 	}
 }
 
@@ -96,16 +88,12 @@ int main(int argc, char** argv )
 	
 	// PARAMETERS
 
-	int maxiter = 16; // Max. iterations
-	int miniter = 16; // Min. iterations
-	float mindprate = 0.05; // Early stopping parameters
-	float mindrrate = 0.95; // Early stopping parameters
-	float minimgerr = 0.0; // Early stopping parameters
+	int iterations = 1000; // Max. iterations
 	int patchsz = 8; // Rectangular patch size in (pixel)
-	int lv_f = std::max(0, (int)std::floor(log2((2.0f*(float)width_org) / ((float)20 * (float)patchsz)))); // Coarsest scale in multi-scale pyramid
-	int lv_l = std::max(lv_f - 2, 0); // Finest scale in multi-scale pyramide
+	const int lv_f = 3; //std::max(0, (int)std::floor(log2((2.0f*(float)width_org) / ((float)70 * (float)patchsz)))); // Coarsest scale in multi-scale pyramid
+	int lv_l = 0; //std::max(lv_f - 2, 0); // Finest scale in multi-scale pyramide
 	float poverl = 0.3; // Patch overlap on each scale (percent)
-	int patnorm = 1; // Mean - normalize patches
+	bool patnorm = true; // Mean - normalize patches
 
 	// Add border for divisible for all scales
 	int padw = 0, padh = 0;
@@ -130,35 +118,35 @@ int main(int argc, char** argv )
 	img_ao_mat.convertTo(img_ao_fmat, CV_32F); // convert to float
 	img_bo_mat.convertTo(img_bo_fmat, CV_32F);
 
-	float* img_ao_pyr = new float[lv_f + 1];
-	float* img_bo_pyr = new float[lv_f + 1];
-	float* img_ao_dx_pyr = new float[lv_f + 1];
-	float* img_ao_dy_pyr = new float[lv_f + 1];
-	float* img_bo_dx_pyr = new float[lv_f + 1];
-	float* img_bo_dy_pyr = new float[lv_f + 1];
+	float* img_ao_pyr[lv_f + 1];
+	float* img_bo_pyr[lv_f + 1];
+	float* img_ao_dx_pyr[lv_f + 1];
+	float* img_ao_dy_pyr[lv_f + 1];
+	float* img_bo_dx_pyr[lv_f + 1];
+	float* img_bo_dy_pyr[lv_f + 1];
 
-	Mat* img_ao_fmat_pyr = new Mat[lv_f + 1];
-	Mat* img_bo_fmat_pyr = new Mat[lv_f + 1];
-	Mat* img_ao_dx_fmat_pyr = new Mat[lv_f + 1];
-	Mat* img_ao_dy_fmat_pyr = new Mat[lv_f + 1];
-	Mat* img_bo_dx_fmat_pyr = new Mat[lv_f + 1];
-	Mat* img_bo_dy_fmat_pyr = new Mat[lv_f + 1];
+	cv::Mat img_ao_fmat_pyr[lv_f + 1];
+	cv::Mat img_bo_fmat_pyr[lv_f + 1];
+	cv::Mat img_ao_dx_fmat_pyr[lv_f + 1];
+	cv::Mat img_ao_dy_fmat_pyr[lv_f + 1];
+	cv::Mat img_bo_dx_fmat_pyr[lv_f + 1];
+	cv::Mat img_bo_dy_fmat_pyr[lv_f + 1];
 
-	ConstructImgPyramide(img_ao_fmat, img_ao_fmat_pyr, img_ao_dx_fmat_pyr, img_ao_dy_fmat_pyr, &img_ao_pyr, &img_ao_dx_pyr, &img_ao_dy_pyr, lv_f, lv_l, true, patchsz, padw, padh);
-	ConstructImgPyramide(img_bo_fmat, img_bo_fmat_pyr, img_bo_dx_fmat_pyr, img_bo_dy_fmat_pyr, &img_bo_pyr, &img_bo_dx_pyr, &img_bo_dy_pyr, lv_f, lv_l, true, patchsz, padw, padh);
-
+	construct_pyramide(img_ao_fmat, img_ao_fmat_pyr, img_ao_dx_fmat_pyr, img_ao_dy_fmat_pyr, img_ao_pyr, img_ao_dx_pyr, img_ao_dy_pyr, lv_f, patchsz);
+	construct_pyramide(img_bo_fmat, img_bo_fmat_pyr, img_bo_dx_fmat_pyr, img_bo_dy_fmat_pyr, img_bo_pyr, img_bo_dx_pyr, img_bo_dy_pyr, lv_f, patchsz);
+	
 	// Run optical flow algorithm
 	float sc_fct = pow(2, lv_l);
 	cv::Mat flowout(sz.height / sc_fct, sz.width / sc_fct, CV_32FC2); // Optical Flow
 
 
-	OFC::OFClass ofc(&img_ao_pyr, &img_ao_dx_pyr, &img_ao_dy_pyr,
-		&img_bo_pyr, &img_bo_dx_pyr, &img_bo_dy_pyr,
+	OFC::OFClass ofc(img_ao_pyr, img_ao_dx_pyr, img_ao_dy_pyr,
+		img_bo_pyr, img_bo_dx_pyr, img_bo_dy_pyr,
 		patchsz,  // extra image padding to avoid border violation check
 		(float*)flowout.data,   // pointer to n-band output float array
 		nullptr,  // pointer to n-band input float array of size of first (coarsest) scale, pass as nullptr to disable
 		sz.width, sz.height,
-		lv_f, lv_l, maxiter, miniter, mindprate, mindrrate, minimgerr, patchsz, poverl, patnorm);
+		lv_f, lv_l, iterations, patchsz, poverl, patnorm);
 
 	// Resize to original scale, if not run to finest level
 	if (lv_l != 0)
@@ -171,6 +159,7 @@ int main(int argc, char** argv )
 
 	Mat dst2;
 	draw_optical_flow(flowout, dst2);
+	imwrite("vc_001.png", dst2);
 	imshow("MOJE", dst2);
     waitKey(0);
 

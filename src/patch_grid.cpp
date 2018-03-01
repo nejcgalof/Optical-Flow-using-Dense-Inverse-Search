@@ -14,11 +14,9 @@ namespace OFC
 
 	PatGridClass::PatGridClass(
 		const camparam* cpt_in,
-		const camparam* cpo_in,
 		const optparam* op_in)
 		:
 		cpt(cpt_in),
-		cpo(cpo_in),
 		op(op_in)
 	{
 
@@ -53,7 +51,7 @@ namespace OFC
 				pt_ref[i][1] = y * steps + offseth;
 				p_init[i].setZero();
 
-				pat.push_back(new OFC::PatClass(cpt, cpo, op, patchid));
+				pat.push_back(new OFC::PatClass(cpt, op, patchid));
 				patchid++;
 			}
 		}
