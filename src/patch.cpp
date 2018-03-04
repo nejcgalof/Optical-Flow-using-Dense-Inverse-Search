@@ -12,32 +12,31 @@
 
 using namespace std;
 
-namespace OFC
+namespace OpticalFlow
 {
-	PatClass::PatClass(
-		const camparam* cpt_in,
-		const optparam* op_in,
-		const int patchid_in)
+	Patch::Patch(image_parameters* image_param_in,
+		fix_parameters* fix_param_in,
+		int patchid_in)
 		:
-		cpt(cpt_in),
-		op(op_in),
+		image_param(image_param_in),
+		fix_param(fix_param_in),
 		patchid(patchid_in)
 	{
 		pc = new patchstate;
-		pc->pdiff.resize(op->novals, 1);
-		pc->pweight.resize(op->novals, 1);
+		pc->pdiff.resize(fix_param->num_points_patch, 1);
+		pc->pweight.resize(fix_param->num_points_patch, 1);
 
-		tmp.resize(op->novals, 1);
-		dxx_tmp.resize(op->novals, 1);
-		dyy_tmp.resize(op->novals, 1);
+		tmp.resize(fix_param->num_points_patch, 1);
+		dxx_tmp.resize(fix_param->num_points_patch, 1);
+		dyy_tmp.resize(fix_param->num_points_patch, 1);
 	}
 
-	PatClass::~PatClass()
+	Patch::~Patch()
 	{
 		delete pc;
 	}
 
-	void PatClass::InitializePatch(Eigen::Map<const Eigen::MatrixXf> * im_ao_in, Eigen::Map<const Eigen::MatrixXf> * im_ao_dx_in, Eigen::Map<const Eigen::MatrixXf> * im_ao_dy_in, const Eigen::Vector2f pt_ref_in)
+	void Patch::InitializePatch(Eigen::Map<const Eigen::MatrixXf> * im_ao_in, Eigen::Map<const Eigen::MatrixXf> * im_ao_dx_in, Eigen::Map<const Eigen::MatrixXf> * im_ao_dy_in, const Eigen::Vector2f pt_ref_in)
 	{
 		im_ao = im_ao_in;
 		im_ao_dx = im_ao_dx_in;
@@ -51,7 +50,7 @@ namespace OFC
 		ComputeHessian();
 	}
 
-	void PatClass::ComputeHessian()
+	void Patch::ComputeHessian()
 	{
 		pc->Hes(0, 0) = (dxx_tmp.array() * dxx_tmp.array()).sum();
 		pc->Hes(0, 1) = (dxx_tmp.array() * dyy_tmp.array()).sum();
@@ -64,7 +63,7 @@ namespace OFC
 		}
 	}
 
-	void PatClass::SetTargetImage(Eigen::Map<const Eigen::MatrixXf> * im_bo_in, Eigen::Map<const Eigen::MatrixXf> * im_bo_dx_in, Eigen::Map<const Eigen::MatrixXf> * im_bo_dy_in)
+	void Patch::SetTargetImage(Eigen::Map<const Eigen::MatrixXf> * im_bo_in, Eigen::Map<const Eigen::MatrixXf> * im_bo_dx_in, Eigen::Map<const Eigen::MatrixXf> * im_bo_dy_in)
 	{
 		im_bo = im_bo_in;
 		im_bo_dx = im_bo_dx_in;
@@ -73,7 +72,7 @@ namespace OFC
 		ResetPatch();
 	}
 
-	void PatClass::ResetPatch()
+	void Patch::ResetPatch()
 	{
 		pc->hasconverged = 0;
 		pc->hasoptstarted = 0;
@@ -89,20 +88,20 @@ namespace OFC
 		pc->invalid = false;
 	}
 
-	void PatClass::OptimizeStart(const Eigen::Vector2f p_in_arg)
+	void Patch::OptimizeStart(const Eigen::Vector2f p_in_arg)
 	{
 		pc->p_in = p_in_arg;
 		pc->p_iter = p_in_arg;
 
 		// convert from input parameters to 2D query location(s) for patches
-		paramtopt();
+		pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
 
 		// save starting location, only needed for outlier check
 		pc->pt_st = pc->pt_iter;
 
 		//Check if initial position is already invalid
-		if (pc->pt_iter[0] < cpt->tmp_lb || pc->pt_iter[1] < cpt->tmp_lb ||    // check if patch left valid image region
-			pc->pt_iter[0] > cpt->tmp_ubw || pc->pt_iter[1] > cpt->tmp_ubh)
+		if (pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb ||    // check if patch left valid image region
+			pc->pt_iter[0] > image_param->tmp_ubw || pc->pt_iter[1] > image_param->tmp_ubh)
 		{
 			pc->hasconverged = 1;
 			pc->pdiff = tmp;
@@ -114,7 +113,7 @@ namespace OFC
 			pc->hasconverged = 0;
 
 			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->pdiff));
-			if ((pc->cnt > op->iterations)) {
+			if ((pc->cnt > fix_param->iterations)) {
 				pc->hasconverged = 1;
 			}
 
@@ -123,7 +122,7 @@ namespace OFC
 		}
 	}
 
-	void PatClass::OptimizeIter(const Eigen::Vector2f p_in_arg, const bool untilconv)
+	void Patch::OptimizeIter(const Eigen::Vector2f p_in_arg, const bool untilconv)
 	{
 		if (!pc->hasoptstarted)
 		{
@@ -146,35 +145,29 @@ namespace OFC
 			pc->p_iter -= pc->delta_p; // update flow vector
 
 															   // compute patch locations based on new parameter vector
-			paramtopt();
+			pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
 
 			// check if patch(es) moved too far from starting location, if yes, stop iteration and reset to starting location
-			if ((pc->pt_st - pc->pt_iter).norm() > op->outlierthresh  // check if query patch moved more than >padval from starting location -> most likely outlier
+			if ((pc->pt_st - pc->pt_iter).norm() > fix_param->outlierthresh  // check if query patch moved more than >padval from starting location -> most likely outlier
 				||
-				pc->pt_iter[0] < cpt->tmp_lb || pc->pt_iter[1] < cpt->tmp_lb ||    // check patch left valid image region
-				pc->pt_iter[0] > cpt->tmp_ubw || pc->pt_iter[1] > cpt->tmp_ubh)
+				pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb ||    // check patch left valid image region
+				pc->pt_iter[0] > image_param->tmp_ubw || pc->pt_iter[1] > image_param->tmp_ubh)
 			{
 				pc->p_iter = pc->p_in; // reset
-				paramtopt();
+				pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
 				pc->hasconverged = 1;
 				pc->hasoptstarted = 1;
 			}
 
 			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->pdiff));
-			if ((pc->cnt > op->iterations)) {
+			if ((pc->cnt > fix_param->iterations)) {
 				pc->hasconverged = 1;
 			}
 		}
 	}
 
-	inline void PatClass::paramtopt()
-	{  
-		pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
-
-	}
-
 	// Extract patch on integer position, and gradients, No Bilinear interpolation
-	void PatClass::getPatchStaticNNGrad(const float* img, const float* img_dx, const float* img_dy,
+	void Patch::getPatchStaticNNGrad(const float* img, const float* img_dx, const float* img_dy,
 		const Eigen::Vector2f* mid_in,
 		Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e,
 		Eigen::Matrix<float, Eigen::Dynamic, 1>*  tmp_dx_in_e,
@@ -187,13 +180,13 @@ namespace OFC
 		Eigen::Vector2i pos;
 		Eigen::Vector2i pos_it;
 
-		pos[0] = round((*mid_in)[0]) + cpt->imgpadding;
-		pos[1] = round((*mid_in)[1]) + cpt->imgpadding;
+		pos[0] = round((*mid_in)[0]) + image_param->imgpadding;
+		pos[1] = round((*mid_in)[1]) + image_param->imgpadding;
 
 		int posxx = 0;
 
-		int lb = -op->p_samp_s / 2;
-		int ub = op->p_samp_s / 2 - 1;
+		int lb = -fix_param->patch_size / 2;
+		int ub = fix_param->patch_size / 2 - 1;
 
 		for (int j = lb; j <= ub; ++j)
 		{
@@ -201,7 +194,7 @@ namespace OFC
 			{
 				pos_it[0] = pos[0] + i;
 				pos_it[1] = pos[1] + j;
-				int idx = pos_it[0] + pos_it[1] * cpt->tmp_w;
+				int idx = pos_it[0] + pos_it[1] * image_param->tmp_w;
 
 				tmp_in[posxx] = img[idx];
 				tmp_dx_in[posxx] = img_dx[idx];
@@ -210,12 +203,12 @@ namespace OFC
 		}
 
 		// PATCH NORMALIZATION
-		if (op->patnorm) // Subtract Mean
-			tmp_in_e->array() -= (tmp_in_e->sum() / op->novals);
+		if (fix_param->patch_normalization) // Subtract Mean
+			tmp_in_e->array() -= (tmp_in_e->sum() / fix_param->num_points_patch);
 	}
 
 	// Extract patch on float position with bilinear interpolation, no gradients.
-	void PatClass::getPatchStaticBil(const float* img, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e)
+	void Patch::getPatchStaticBil(const float* img, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e)
 	{
 		float *tmp_in = tmp_in_e->data();
 
@@ -237,21 +230,21 @@ namespace OFC
 		we[2] = resid[0] * (1 - resid[1]);
 		we[3] = (1 - resid[0])*(1 - resid[1]);
 
-		pos[0] += cpt->imgpadding;
-		pos[1] += cpt->imgpadding;
+		pos[0] += image_param->imgpadding;
+		pos[1] += image_param->imgpadding;
 
 		float * tmp_it = tmp_in;
 		const float * img_a, *img_b, *img_c, *img_d, *img_e;
 
-		img_e = img + pos[0] - op->p_samp_s / 2;
+		img_e = img + pos[0] - fix_param->patch_size / 2;
 
-		int lb = -op->p_samp_s / 2;
-		int ub = op->p_samp_s / 2 - 1;
+		int lb = -fix_param->patch_size / 2;
+		int ub = fix_param->patch_size / 2 - 1;
 
 		for (pos_it[1] = pos[1] + lb; pos_it[1] <= pos[1] + ub; ++pos_it[1])
 		{
-			img_a = img_e + pos_it[1] * cpt->tmp_w;
-			img_c = img_e + (pos_it[1] - 1) * cpt->tmp_w;
+			img_a = img_e + pos_it[1] * image_param->tmp_w;
+			img_c = img_e + (pos_it[1] - 1) * image_param->tmp_w;
 			img_b = img_a - 1;
 			img_d = img_c - 1;
 
@@ -263,8 +256,8 @@ namespace OFC
 			}
 		}
 		// PATCH NORMALIZATION
-		if (op->patnorm) // Subtract Mean
-			tmp_in_e->array() -= (tmp_in_e->sum() / op->novals);
+		if (fix_param->patch_normalization) // Subtract Mean
+			tmp_in_e->array() -= (tmp_in_e->sum() / fix_param->num_points_patch);
 	}
 
 }

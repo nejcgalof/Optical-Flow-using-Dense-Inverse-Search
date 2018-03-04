@@ -1,7 +1,7 @@
 #pragma once
 #include "optical_flow.hpp" // For camera intrinsic and opt. parameter struct
 
-namespace OFC
+namespace OpticalFlow
 {
 	typedef struct
 	{
@@ -12,11 +12,8 @@ namespace OFC
 		Eigen::Matrix<float, Eigen::Dynamic, 1> pdiff; // image error to reference image
 		Eigen::Matrix<float, Eigen::Dynamic, 1> pweight; // absolute error image
 
-
 		Eigen::Matrix<float, 2, 2> Hes; // Hessian for optimization
 		Eigen::Vector2f p_in, p_iter, delta_p; // point position, displacement to starting position, iteration update
-														  // start positions, current point position, patch norm
-		Eigen::Matrix<float, 1, 1> normtmp;
 		Eigen::Vector2f pt_iter;
 		Eigen::Vector2f pt_st;
 
@@ -26,35 +23,26 @@ namespace OFC
 
 
 
-	class PatClass
+	class Patch
 	{
 
 	public:
-		PatClass(const camparam* cpt_in,
-			const optparam* op_in,
-			const int patchid_in);
-
-		~PatClass();
+		Patch(image_parameters* image_param_in, fix_parameters* fix_param_in, int patchid_in);
+		~Patch();
 
 		void InitializePatch(Eigen::Map<const Eigen::MatrixXf> * im_ao_in, Eigen::Map<const Eigen::MatrixXf> * im_ao_dx_in, Eigen::Map<const Eigen::MatrixXf> * im_ao_dy_in, const Eigen::Vector2f pt_ref_in);
 		void SetTargetImage(Eigen::Map<const Eigen::MatrixXf> * im_bo_in, Eigen::Map<const Eigen::MatrixXf> * im_bo_dx_in, Eigen::Map<const Eigen::MatrixXf> * im_bo_dy_in);
 
 		void OptimizeIter(const Eigen::Vector2f p_in_arg, const bool untilconv);
 
-		inline const bool isConverged() const { return pc->hasconverged; }
-		inline const bool hasOptStarted() const { return pc->hasoptstarted; }
-		inline const Eigen::Vector2f GetPointPos() const { return pc->pt_iter; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
-		inline const bool IsValid() const { return (!pc->invalid); }
-		inline const float * GetpWeightPtr() const { return (float*)pc->pweight.data(); } // Return data pointer to image error patch, used in efficient indexing for densification in patchgrid class
-
-		inline const Eigen::Vector2f* GetParam() const { return &(pc->p_iter); }   // get current iteration parameters
-
-		inline const Eigen::Vector2f* GetParamStart() const { return &(pc->p_in); }
+		Eigen::Vector2f GetPointPos()  { return pc->pt_iter; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
+		bool IsValid() { return (!pc->invalid); }
+		float * GetpWeightPtr() { return (float*)pc->pweight.data(); } // Return data pointer to image error patch, used in efficient indexing for densification in patchgrid class
+		Eigen::Vector2f* GetParam() { return &(pc->p_iter); }   // get current iteration parameters
 
 	private:
 
 		void OptimizeStart(const Eigen::Vector2f p_in_arg);
-		void paramtopt();
 		void ResetPatch();
 		void ComputeHessian();
 		
@@ -71,11 +59,10 @@ namespace OFC
 		Eigen::Map<const Eigen::MatrixXf> * im_ao, *im_ao_dx, *im_ao_dy;
 		Eigen::Map<const Eigen::MatrixXf> * im_bo, *im_bo_dx, *im_bo_dy;
 
-		const camparam* cpt;
-		const optparam* op;
-		const int patchid;
+		image_parameters* image_param;
+		fix_parameters* fix_param;
+		int patchid;
 
 		patchstate * pc = nullptr; // current patch state
-
 	};
 }

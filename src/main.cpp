@@ -89,15 +89,15 @@ int main(int argc, char** argv )
 	// PARAMETERS
 
 	int iterations = 1000; // Max. iterations
-	int patchsz = 8; // Rectangular patch size in (pixel)
-	const int lv_f = 3; //std::max(0, (int)std::floor(log2((2.0f*(float)width_org) / ((float)70 * (float)patchsz)))); // Coarsest scale in multi-scale pyramid
-	int lv_l = 0; //std::max(lv_f - 2, 0); // Finest scale in multi-scale pyramide
-	float poverl = 0.3; // Patch overlap on each scale (percent)
-	bool patnorm = true; // Mean - normalize patches
+	int patch_size = 8; // Rectangular patch size in (pixel)
+	const int coarsest_scale = 3; // Coarsest scale in multi-scale pyramid
+	int finest_scale = 0; // Finest scale in multi-scale pyramide
+	float patch_overlap = 0.7; // Patch overlap on each scale (percent)
+	bool patch_normalization = true; // Mean - normalize patches
 
 	// Add border for divisible for all scales
 	int padw = 0, padh = 0;
-	int scale_factor = pow(2, lv_f); // Division by this number on coarsest scale
+	int scale_factor = pow(2, coarsest_scale); // Division by this number on coarsest scale
 	int div = sz.width % scale_factor;
 	if (div > 0) { // If not divide , set padding
 		padw = scale_factor - div;
@@ -118,38 +118,38 @@ int main(int argc, char** argv )
 	img_ao_mat.convertTo(img_ao_fmat, CV_32F); // convert to float
 	img_bo_mat.convertTo(img_bo_fmat, CV_32F);
 
-	float* img_ao_pyr[lv_f + 1];
-	float* img_bo_pyr[lv_f + 1];
-	float* img_ao_dx_pyr[lv_f + 1];
-	float* img_ao_dy_pyr[lv_f + 1];
-	float* img_bo_dx_pyr[lv_f + 1];
-	float* img_bo_dy_pyr[lv_f + 1];
+	float* img_ao_pyr[coarsest_scale + 1];
+	float* img_bo_pyr[coarsest_scale + 1];
+	float* img_ao_dx_pyr[coarsest_scale + 1];
+	float* img_ao_dy_pyr[coarsest_scale + 1];
+	float* img_bo_dx_pyr[coarsest_scale + 1];
+	float* img_bo_dy_pyr[coarsest_scale + 1];
 
-	cv::Mat img_ao_fmat_pyr[lv_f + 1];
-	cv::Mat img_bo_fmat_pyr[lv_f + 1];
-	cv::Mat img_ao_dx_fmat_pyr[lv_f + 1];
-	cv::Mat img_ao_dy_fmat_pyr[lv_f + 1];
-	cv::Mat img_bo_dx_fmat_pyr[lv_f + 1];
-	cv::Mat img_bo_dy_fmat_pyr[lv_f + 1];
+	cv::Mat img_ao_fmat_pyr[coarsest_scale + 1];
+	cv::Mat img_bo_fmat_pyr[coarsest_scale + 1];
+	cv::Mat img_ao_dx_fmat_pyr[coarsest_scale + 1];
+	cv::Mat img_ao_dy_fmat_pyr[coarsest_scale + 1];
+	cv::Mat img_bo_dx_fmat_pyr[coarsest_scale + 1];
+	cv::Mat img_bo_dy_fmat_pyr[coarsest_scale + 1];
 
-	construct_pyramide(img_ao_fmat, img_ao_fmat_pyr, img_ao_dx_fmat_pyr, img_ao_dy_fmat_pyr, img_ao_pyr, img_ao_dx_pyr, img_ao_dy_pyr, lv_f, patchsz);
-	construct_pyramide(img_bo_fmat, img_bo_fmat_pyr, img_bo_dx_fmat_pyr, img_bo_dy_fmat_pyr, img_bo_pyr, img_bo_dx_pyr, img_bo_dy_pyr, lv_f, patchsz);
+	construct_pyramide(img_ao_fmat, img_ao_fmat_pyr, img_ao_dx_fmat_pyr, img_ao_dy_fmat_pyr, img_ao_pyr, img_ao_dx_pyr, img_ao_dy_pyr, coarsest_scale, patch_size);
+	construct_pyramide(img_bo_fmat, img_bo_fmat_pyr, img_bo_dx_fmat_pyr, img_bo_dy_fmat_pyr, img_bo_pyr, img_bo_dx_pyr, img_bo_dy_pyr, coarsest_scale, patch_size);
 	
 	// Run optical flow algorithm
-	float sc_fct = pow(2, lv_l);
+	float sc_fct = pow(2, finest_scale);
 	cv::Mat flowout(sz.height / sc_fct, sz.width / sc_fct, CV_32FC2); // Optical Flow
 
 
-	OFC::OFClass ofc(img_ao_pyr, img_ao_dx_pyr, img_ao_dy_pyr,
+	OpticalFlow::OpticalFlowClass ofc(img_ao_pyr, img_ao_dx_pyr, img_ao_dy_pyr,
 		img_bo_pyr, img_bo_dx_pyr, img_bo_dy_pyr,
-		patchsz,  // extra image padding to avoid border violation check
+		patch_size,  // extra image padding to avoid border violation check
 		(float*)flowout.data,   // pointer to n-band output float array
 		nullptr,  // pointer to n-band input float array of size of first (coarsest) scale, pass as nullptr to disable
 		sz.width, sz.height,
-		lv_f, lv_l, iterations, patchsz, poverl, patnorm);
+		coarsest_scale, finest_scale, iterations, patch_size, patch_overlap, patch_normalization);
 
 	// Resize to original scale, if not run to finest level
-	if (lv_l != 0)
+	if (finest_scale != 0)
 	{
 		flowout *= sc_fct;
 		cv::resize(flowout, flowout, cv::Size(), sc_fct, sc_fct, cv::INTER_LINEAR);

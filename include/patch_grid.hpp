@@ -2,17 +2,17 @@
 #include "patch.hpp"
 #include "optical_flow.hpp" // For camera intrinsic and opt. parameter struct
 
-namespace OFC
+namespace OpticalFlow
 {
 
-	class PatGridClass
+	class PatchGrid
 	{
 
 	public:
-		PatGridClass(const camparam* cpt_in,
-			const optparam* op_in);
+		PatchGrid(image_parameters* image_param_in,
+			fix_parameters* fix_param_in);
 
-		~PatGridClass();
+		~PatchGrid();
 
 		void InitializeGrid(const float * im_ao_in, const float * im_ao_dx_in, const float * im_ao_dy_in);
 		void SetTargetImage(const float * im_bo_in, const float * im_bo_dx_in, const float * im_bo_dy_in);
@@ -25,7 +25,7 @@ namespace OFC
 		//Optimize each patch in grid for one iteration, visualize displacement vector, repeat
 		//void OptimizeAndVisualize(const float sc_fct_tmp);  // needed for verbosity >= 3, DISVISUAL
 
-		void SetComplGrid(PatGridClass *cg_in);
+		void SetComplGrid(PatchGrid *cg_in);
 
 		inline const int GetNoPatches() const { return nopatches; }
 		inline const int GetNoph() const { return noph; }
@@ -43,20 +43,19 @@ namespace OFC
 		Eigen::Map<const Eigen::MatrixXf> * im_ao_eg, *im_ao_dx_eg, *im_ao_dy_eg;
 		Eigen::Map<const Eigen::MatrixXf> * im_bo_eg, *im_bo_dx_eg, *im_bo_dy_eg;
 
-		const camparam* cpt;
-		const camparam* cpo;
-		const optparam* op;
+		image_parameters* image_param;
+		fix_parameters* fix_param;
 
 		int steps;
 		int nopw;
 		int noph;
 		int nopatches;
 
-		std::vector<OFC::PatClass*> pat; // Patch Objects
+		std::vector<OpticalFlow::Patch*> pat; // Patch Objects
 		std::vector<Eigen::Vector2f> pt_ref; // Midpoints for reference patches
 		std::vector<Eigen::Vector2f> p_init; // starting parameters for query patches, use only 1 for depth, 2 for OF, all 4 for scene flow  
 
-		const PatGridClass * cg = nullptr;
+		const PatchGrid * cg = nullptr;
 	};
 
 
