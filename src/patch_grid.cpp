@@ -8,67 +8,61 @@
 #include "patch_grid.hpp"
 
 using namespace std;
+using namespace cv;
+using namespace Eigen;
 
 namespace OpticalFlow
 {
 
-	PatchGrid::PatchGrid(
-		image_parameters* image_param_in,
-		fix_parameters* fix_param_in)
-		:
-		image_param(image_param_in),
-		fix_param(fix_param_in)
+	PatchGrid::PatchGrid(image_parameters* image_param_in, fix_parameters* fix_param_in) : image_param(image_param_in), fix_param(fix_param_in)
 	{
-
 		// Generate grid on current scale
-		steps = fix_param->steps;
-		nopw = ceil((float)image_param->width / (float)steps);
-		noph = ceil((float)image_param->height / (float)steps);
-		int offsetw = floor((image_param->width - (nopw - 1)*steps) / 2);
-		int offseth = floor((image_param->height - (noph - 1)*steps) / 2);
+		num_patch_width = ceil((float)image_param->width / (float)fix_param->steps);
+		num_patch_height = ceil((float)image_param->height / (float)fix_param->steps);
+		int offsetw = floor((image_param->width - (num_patch_width - 1)*fix_param->steps) / 2);
+		int offseth = floor((image_param->height - (num_patch_height - 1)*fix_param->steps) / 2);
 
-		nopatches = nopw*noph;
-		pt_ref.resize(nopatches);
-		p_init.resize(nopatches);
-		pat.reserve(nopatches);
+		num_all_patch = num_patch_width*num_patch_height;
+		patch_reference.resize(num_all_patch);
+		patch_init.resize(num_all_patch);
+		patches.reserve(num_all_patch);
 
-		im_ao_eg = new Eigen::Map<const Eigen::MatrixXf>(nullptr, image_param->height, image_param->width);
-		im_ao_dx_eg = new Eigen::Map<const Eigen::MatrixXf>(nullptr, image_param->height, image_param->width);
-		im_ao_dy_eg = new Eigen::Map<const Eigen::MatrixXf>(nullptr, image_param->height, image_param->width);
+		img_first_eg = new Map<MatrixXf>(nullptr, image_param->height, image_param->width);
+		img_first_eg = new Map<MatrixXf>(nullptr, image_param->height, image_param->width);
+		img_first_eg = new Map<MatrixXf>(nullptr, image_param->height, image_param->width);
 
-		im_bo_eg = new Eigen::Map<const Eigen::MatrixXf>(nullptr, image_param->height, image_param->width);
-		im_bo_dx_eg = new Eigen::Map<const Eigen::MatrixXf>(nullptr, image_param->height, image_param->width);
-		im_bo_dy_eg = new Eigen::Map<const Eigen::MatrixXf>(nullptr, image_param->height, image_param->width);
+		img_second_eg = new Map<MatrixXf>(nullptr, image_param->height, image_param->width);
+		img_second_dx_eg = new Map<MatrixXf>(nullptr, image_param->height, image_param->width);
+		img_second_dy_eg = new Map<MatrixXf>(nullptr, image_param->height, image_param->width);
 
-		int patchid = 0;
-		for (int x = 0; x < nopw; ++x)
+		int patch_id = 0;
+		for (int x = 0; x < num_patch_width; ++x)
 		{
-			for (int y = 0; y < noph; ++y)
+			for (int y = 0; y < num_patch_height; ++y)
 			{
-				int i = x*noph + y;
+				patch_reference[patch_id][0] = x * fix_param->steps + offsetw;
+				patch_reference[patch_id][1] = y * fix_param->steps + offseth;
+				patch_init[patch_id].setZero();
 
-				pt_ref[i][0] = x * steps + offsetw;
-				pt_ref[i][1] = y * steps + offseth;
-				p_init[i].setZero();
-
-				pat.push_back(new OpticalFlow::Patch(image_param, fix_param, patchid));
-				patchid++;
+				patches.push_back(new Patch(image_param, fix_param));
+				patch_id++;
 			}
 		}
 	}
 
 	PatchGrid::~PatchGrid()
 	{
-		delete im_ao_eg;
-		delete im_ao_dx_eg;
-		delete im_ao_dy_eg;
+		delete img_first_eg;
+		delete img_first_dx_eg;
+		delete img_first_dy_eg;
 
-		delete im_bo_eg;
-		delete im_bo_dx_eg;
-		delete im_bo_dy_eg;
+		delete img_second_eg;
+		delete img_second_dx_eg;
+		delete img_second_dy_eg;
 
-		for (int i = 0; i< nopatches; ++i)
-			delete pat[i];
+		for (int i = 0; i < num_all_patch; ++i) {
+			delete patches[i];
+		}
 	}
 
 	void PatchGrid::SetComplGrid(PatchGrid *cg_in)
@@ -76,58 +70,55 @@ namespace OpticalFlow
 		cg = cg_in;
 	}
 
-
-	void PatchGrid::InitializeGrid(const float * im_ao_in, const float * im_ao_dx_in, const float * im_ao_dy_in)
+	void PatchGrid::init_grid(float* img_first_in, float* img_first_dx_in, float* img_first_dy_in)
 	{
-		im_ao = im_ao_in;
-		im_ao_dx = im_ao_dx_in;
-		im_ao_dy = im_ao_dy_in;
+		img_first = img_first_in;
+		img_first_dx = img_first_dx_in;
+		img_first_dy = img_first_dy_in;
+		img_first_eg = new Map<MatrixXf>(img_first, image_param->height, image_param->width);
+		img_first_dx_eg = new Map<MatrixXf>(img_first_dx, image_param->height, image_param->width);
+		img_first_dy_eg = new Map<MatrixXf>(img_first_dy, image_param->height, image_param->width);
 
-		new (im_ao_eg) Eigen::Map<const Eigen::MatrixXf>(im_ao, image_param->height, image_param->width); // new placement operator
-		new (im_ao_dx_eg) Eigen::Map<const Eigen::MatrixXf>(im_ao_dx, image_param->height, image_param->width);
-		new (im_ao_dy_eg) Eigen::Map<const Eigen::MatrixXf>(im_ao_dy, image_param->height, image_param->width);
-
-		for (int i = 0; i < nopatches; ++i)
+		for (int i = 0; i < num_all_patch; ++i)
 		{
-			pat[i]->InitializePatch(im_ao_eg, im_ao_dx_eg, im_ao_dy_eg, pt_ref[i]);
-			p_init[i].setZero();
+			patches[i]->InitializePatch(img_first_eg, img_first_dx_eg, img_first_dy_eg, patch_reference[i]);
+			patch_init[i].setZero();
 		}
-
 	}
 
-	void PatchGrid::SetTargetImage(const float * im_bo_in, const float * im_bo_dx_in, const float * im_bo_dy_in)
+	void PatchGrid::set_target_image(float* img_second_in, float* img_second_dx_in, float* img_second_dy_in)
 	{
-		im_bo = im_bo_in;
-		im_bo_dx = im_bo_dx_in;
-		im_bo_dy = im_bo_dy_in;
+		img_second = img_second_in;
+		img_second_dx = img_second_dx_in;
+		img_second_dy = img_second_dy_in;
 
-		new (im_bo_eg) Eigen::Map<const Eigen::MatrixXf>(im_bo, image_param->height, image_param->width); // new placement operator
-		new (im_bo_dx_eg) Eigen::Map<const Eigen::MatrixXf>(im_bo_dx, image_param->height, image_param->width); // new placement operator
-		new (im_bo_dy_eg) Eigen::Map<const Eigen::MatrixXf>(im_bo_dy, image_param->height, image_param->width); // new placement operator
+		img_second_eg = new Map<MatrixXf>(img_second, image_param->height, image_param->width);
+		img_second_dx_eg = new Map<MatrixXf>(img_second_dx, image_param->height, image_param->width);
+		img_second_dy_eg = new Map<MatrixXf>(img_second_dy, image_param->height, image_param->width);
 
-		for (int i = 0; i < nopatches; ++i)
-			pat[i]->SetTargetImage(im_bo_eg, im_bo_dx_eg, im_bo_dy_eg);
-
+		for (int i = 0; i < num_all_patch; ++i) {
+			patches[i]->SetTargetImage(img_second_eg, img_second_dx_eg, img_second_dy_eg);
+		}
 	}
 
 	void PatchGrid::Optimize()
 	{
-		for (int i = 0; i < nopatches; ++i)
+		for (int i = 0; i < num_all_patch; ++i)
 		{
-			pat[i]->OptimizeIter(p_init[i], true); // optimize until convergence  
+			patches[i]->OptimizeIter(patch_init[i], true); // optimize until convergence  
 		}
 	}
 
 	void PatchGrid::InitializeFromCoarserOF(const float * flow_prev)
 	{
-		for (int ip = 0; ip < nopatches; ++ip)
+		for (int ip = 0; ip < num_all_patch; ++ip)
 		{
-			int x = floor(pt_ref[ip][0] / 2); // better, but slower: use bil. interpolation here
-			int y = floor(pt_ref[ip][1] / 2);
+			int x = floor(patch_reference[ip][0] / 2); // better, but slower: use bil. interpolation here
+			int y = floor(patch_reference[ip][1] / 2);
 			int i = y*(image_param->width / 2) + x;
 
-			p_init[ip](0) = flow_prev[2 * i] * 2;
-			p_init[ip](1) = flow_prev[2 * i + 1] * 2;
+			patch_init[ip](0) = flow_prev[2 * i] * 2;
+			patch_init[ip](1) = flow_prev[2 * i + 1] * 2;
 		}
 	}
 
@@ -138,15 +129,15 @@ namespace OpticalFlow
 		memset(flowout, 0, sizeof(float) * (2 * image_param->width * image_param->height));
 		memset(we, 0, sizeof(float) * (image_param->width * image_param->height));
 
-		for (int ip = 0; ip < nopatches; ++ip)
+		for (int ip = 0; ip < num_all_patch; ++ip)
 		{
 
-			if (pat[ip]->IsValid())
+			if (patches[ip]->IsValid())
 			{
-				const Eigen::Vector2f* fl = pat[ip]->GetParam(); // flow displacement of this patch
+				const Eigen::Vector2f* fl = patches[ip]->GetParam(); // flow displacement of this patch
 				Eigen::Vector2f flnew;
 
-				const float * pweight = pat[ip]->GetpWeightPtr(); // use image error as weight
+				const float * pweight = patches[ip]->GetpWeightPtr(); // use image error as weight
 
 				int lb = -fix_param->patch_size / 2;
 				int ub = fix_param->patch_size / 2 - 1;
@@ -155,8 +146,8 @@ namespace OpticalFlow
 				{
 					for (int x = lb; x <= ub; ++x, ++pweight)
 					{
-						int yt = (y + pt_ref[ip][1]);
-						int xt = (x + pt_ref[ip][0]);
+						int yt = (y + patch_reference[ip][1]);
+						int xt = (x + patch_reference[ip][0]);
 
 						if (xt >= 0 && yt >= 0 && xt < image_param->width && yt < image_param->height)
 						{
@@ -182,15 +173,15 @@ namespace OpticalFlow
 			Eigen::Vector4f wbil; // bilinear weight vector
 			Eigen::Vector4i pos;
 
-			for (int ip = 0; ip < cg->nopatches; ++ip)
+			for (int ip = 0; ip < cg->num_all_patch; ++ip)
 			{
-				if (cg->pat[ip]->IsValid())
+				if (cg->patches[ip]->IsValid())
 				{
-					const Eigen::Vector2f* fl = (cg->pat[ip]->GetParam()); // flow displacement of this patch
+					const Eigen::Vector2f* fl = (cg->patches[ip]->GetParam()); // flow displacement of this patch
 					Eigen::Vector2f flnew;
 
-					const Eigen::Vector2f rppos = cg->pat[ip]->GetPointPos(); // get patch position after optimization
-					const float * pweight = cg->pat[ip]->GetpWeightPtr(); // use image error as weight
+					const Eigen::Vector2f rppos = cg->patches[ip]->GetPointPos(); // get patch position after optimization
+					const float * pweight = cg->patches[ip]->GetpWeightPtr(); // use image error as weight
 
 					Eigen::Vector2f resid;
 

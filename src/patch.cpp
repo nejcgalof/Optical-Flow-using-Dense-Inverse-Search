@@ -11,20 +11,16 @@
 #include "patch.hpp"
 
 using namespace std;
+using namespace cv;
+using namespace Eigen;
 
 namespace OpticalFlow
 {
-	Patch::Patch(image_parameters* image_param_in,
-		fix_parameters* fix_param_in,
-		int patchid_in)
-		:
-		image_param(image_param_in),
-		fix_param(fix_param_in),
-		patchid(patchid_in)
+	Patch::Patch(image_parameters* image_param_in, fix_parameters* fix_param_in) : image_param(image_param_in), fix_param(fix_param_in)
 	{
-		pc = new patchstate;
-		pc->pdiff.resize(fix_param->num_points_patch, 1);
-		pc->pweight.resize(fix_param->num_points_patch, 1);
+		pc = new patch_state;
+		pc->patch_diff.resize(fix_param->num_points_patch, 1);
+		pc->patch_weight.resize(fix_param->num_points_patch, 1);
 
 		tmp.resize(fix_param->num_points_patch, 1);
 		dxx_tmp.resize(fix_param->num_points_patch, 1);
@@ -36,7 +32,7 @@ namespace OpticalFlow
 		delete pc;
 	}
 
-	void Patch::InitializePatch(Eigen::Map<const Eigen::MatrixXf> * im_ao_in, Eigen::Map<const Eigen::MatrixXf> * im_ao_dx_in, Eigen::Map<const Eigen::MatrixXf> * im_ao_dy_in, const Eigen::Vector2f pt_ref_in)
+	void Patch::InitializePatch(Map<MatrixXf> * im_ao_in, Map<MatrixXf> * im_ao_dx_in, Map<MatrixXf> * im_ao_dy_in, Vector2f pt_ref_in)
 	{
 		im_ao = im_ao_in;
 		im_ao_dx = im_ao_dx_in;
@@ -63,7 +59,7 @@ namespace OpticalFlow
 		}
 	}
 
-	void Patch::SetTargetImage(Eigen::Map<const Eigen::MatrixXf> * im_bo_in, Eigen::Map<const Eigen::MatrixXf> * im_bo_dx_in, Eigen::Map<const Eigen::MatrixXf> * im_bo_dy_in)
+	void Patch::SetTargetImage(Map<MatrixXf> * im_bo_in, Map<MatrixXf> * im_bo_dx_in, Map<MatrixXf> * im_bo_dy_in)
 	{
 		im_bo = im_bo_in;
 		im_bo_dx = im_bo_dx_in;
@@ -101,10 +97,10 @@ namespace OpticalFlow
 
 		//Check if initial position is already invalid
 		if (pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb ||    // check if patch left valid image region
-			pc->pt_iter[0] > image_param->tmp_ubw || pc->pt_iter[1] > image_param->tmp_ubh)
+			pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
 		{
 			pc->hasconverged = 1;
-			pc->pdiff = tmp;
+			pc->patch_diff = tmp;
 			pc->hasoptstarted = 1;
 		}
 		else
@@ -112,7 +108,7 @@ namespace OpticalFlow
 			pc->cnt = 0; // reset iteration counter
 			pc->hasconverged = 0;
 
-			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->pdiff));
+			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->patch_diff));
 			if ((pc->cnt > fix_param->iterations)) {
 				pc->hasconverged = 1;
 			}
@@ -137,8 +133,8 @@ namespace OpticalFlow
 			pc->cnt++;
 
 			// Projection onto sd_images
-			pc->delta_p[0] = (dxx_tmp.array() * pc->pdiff.array()).sum();
-			pc->delta_p[1] = (dyy_tmp.array() * pc->pdiff.array()).sum();
+			pc->delta_p[0] = (dxx_tmp.array() * pc->patch_diff.array()).sum();
+			pc->delta_p[1] = (dyy_tmp.array() * pc->patch_diff.array()).sum();
 
 			pc->delta_p = pc->Hes.llt().solve(pc->delta_p); // solve linear system
 
@@ -151,7 +147,7 @@ namespace OpticalFlow
 			if ((pc->pt_st - pc->pt_iter).norm() > fix_param->outlierthresh  // check if query patch moved more than >padval from starting location -> most likely outlier
 				||
 				pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb ||    // check patch left valid image region
-				pc->pt_iter[0] > image_param->tmp_ubw || pc->pt_iter[1] > image_param->tmp_ubh)
+				pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
 			{
 				pc->p_iter = pc->p_in; // reset
 				pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
@@ -159,7 +155,7 @@ namespace OpticalFlow
 				pc->hasoptstarted = 1;
 			}
 
-			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->pdiff));
+			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->patch_diff));
 			if ((pc->cnt > fix_param->iterations)) {
 				pc->hasconverged = 1;
 			}
@@ -180,8 +176,8 @@ namespace OpticalFlow
 		Eigen::Vector2i pos;
 		Eigen::Vector2i pos_it;
 
-		pos[0] = round((*mid_in)[0]) + image_param->imgpadding;
-		pos[1] = round((*mid_in)[1]) + image_param->imgpadding;
+		pos[0] = round((*mid_in)[0]) + image_param->img_padding;
+		pos[1] = round((*mid_in)[1]) + image_param->img_padding;
 
 		int posxx = 0;
 
@@ -230,8 +226,8 @@ namespace OpticalFlow
 		we[2] = resid[0] * (1 - resid[1]);
 		we[3] = (1 - resid[0])*(1 - resid[1]);
 
-		pos[0] += image_param->imgpadding;
-		pos[1] += image_param->imgpadding;
+		pos[0] += image_param->img_padding;
+		pos[1] += image_param->img_padding;
 
 		float * tmp_it = tmp_in;
 		const float * img_a, *img_b, *img_c, *img_d, *img_e;

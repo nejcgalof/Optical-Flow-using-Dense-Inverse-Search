@@ -7,6 +7,7 @@
 
 using namespace std;
 using namespace cv;
+using namespace Eigen;
 
 namespace OpticalFlow
 {
@@ -14,10 +15,10 @@ namespace OpticalFlow
 	{
 		int width; // image width, does not include '2*imgpadding', but includes original padding to ensure integer divisible image width and height
 		int height; // image height, does not include '2*imgpadding', but includes original padding to ensure integer divisible image width and height
-		int imgpadding; // image padding in pixels at all sides, images padded with replicated border, gradients padded with zero
+		int img_padding; // image padding in pixels at all sides, images padded with replicated border, gradients padded with zero
 		float tmp_lb; // lower bound for valid image region, pre-compute for image padding to avoid border check 
-		float tmp_ubw; // upper width bound for valid image region, pre-compute for image padding to avoid border check 
-		float tmp_ubh; // upper height bound for valid image region, pre-compute for image padding to avoid border check 
+		float tmp_ub_w; // upper width bound for valid image region, pre-compute for image padding to avoid border check 
+		float tmp_ub_h; // upper height bound for valid image region, pre-compute for image padding to avoid border check 
 		int tmp_w; // width + 2*imgpadding
 		int tmp_h; // height + 2*imgpadding
 	} image_parameters;
@@ -41,11 +42,10 @@ namespace OpticalFlow
 
 	public:
 		OpticalFlowClass(
-			float** im_ao_in, float** im_ao_dx_in, float** im_ao_dy_in,
-			float ** im_bo_in, float ** im_bo_dx_in, float ** im_bo_dy_in,
-			int imgpadding_in,
+			float** img_first_in, float** img_first_dx_in, float** img_first_dy_in,
+			float** img_second_in, float** img_second_dx_in, float** img_second_dy_in,
+			int img_padding_in,
 			float * outflow, // Output-flow
-			float * initflow, // Initialization-flow
 			int width_in, int height_in,
 			int coarsest_scale, int finest_scale,
 			int iterations,
@@ -54,10 +54,10 @@ namespace OpticalFlow
 			bool patnorm_in);
 
 	private:
-		void DisplayDrawPatchBoundary(cv::Mat img, Eigen::Vector2f pt, float sc);
+		void DisplayDrawPatchBoundary(Mat img, Vector2f pt, float sc);
 
-		float ** im_ao, ** im_ao_dx, ** im_ao_dy;
-		float ** im_bo, ** im_bo_dx, ** im_bo_dy;
+		float** img_first, ** img_first_dx, ** img_first_dy;
+		float** img_second, ** img_second_dx, ** img_second_dy;
 
 		fix_parameters fix_param;
 		vector<image_parameters> image_param;

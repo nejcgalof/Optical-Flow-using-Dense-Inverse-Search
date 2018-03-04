@@ -2,6 +2,10 @@
 #include "patch.hpp"
 #include "optical_flow.hpp" // For camera intrinsic and opt. parameter struct
 
+using namespace std;
+using namespace cv;
+using namespace Eigen;
+
 namespace OpticalFlow
 {
 
@@ -9,53 +13,45 @@ namespace OpticalFlow
 	{
 
 	public:
-		PatchGrid(image_parameters* image_param_in,
-			fix_parameters* fix_param_in);
-
+		PatchGrid(image_parameters* image_param_in, fix_parameters* fix_param_in);
 		~PatchGrid();
 
-		void InitializeGrid(const float * im_ao_in, const float * im_ao_dx_in, const float * im_ao_dy_in);
-		void SetTargetImage(const float * im_bo_in, const float * im_bo_dx_in, const float * im_bo_dy_in);
+		void init_grid(float* img_first_in, float* img_first_dx_in, float* img_first_dy_in);
+		void set_target_image(float* img_second_in, float* img_second_dx_in, float* img_second_dy_in);
 		void InitializeFromCoarserOF(const float * flow_prev);
 
 		void AggregateFlowDense(float *flowout) const;
 
 		// Optimizes grid to convergence of each patch
 		void Optimize();
-		//Optimize each patch in grid for one iteration, visualize displacement vector, repeat
-		//void OptimizeAndVisualize(const float sc_fct_tmp);  // needed for verbosity >= 3, DISVISUAL
 
 		void SetComplGrid(PatchGrid *cg_in);
 
-		inline const int GetNoPatches() const { return nopatches; }
-		inline const int GetNoph() const { return noph; }
-		inline const int GetNopw() const { return nopw; }
-
-		inline const Eigen::Vector2f GetRefPatchPos(int i) const { return pt_ref[i]; } // Get reference  patch position
-		inline const Eigen::Vector2f GetQuePatchPos(int i) const { return pat[i]->GetPointPos(); } // Get target/query patch position
-		inline const Eigen::Vector2f GetQuePatchDis(int i) const { return pt_ref[i] - pat[i]->GetPointPos(); } // Get query patch displacement from reference patch
+		int get_num_all_patch() { return num_all_patch; }
+		Vector2f GetRefPatchPos(int i) { return patch_reference[i]; } // Get reference  patch position
+		Vector2f GetQuePatchPos(int i) { return patches[i]->GetPointPos(); } // Get target/query patch position
+		Vector2f GetQuePatchDis(int i) { return patch_reference[i] - patches[i]->GetPointPos(); } // Get query patch displacement from reference patch
 
 	private:
 
-		const float * im_ao, *im_ao_dx, *im_ao_dy;
-		const float * im_bo, *im_bo_dx, *im_bo_dy;
+		float * img_first, *img_first_dx, *img_first_dy;
+		float * img_second, *img_second_dx, *img_second_dy;
 
-		Eigen::Map<const Eigen::MatrixXf> * im_ao_eg, *im_ao_dx_eg, *im_ao_dy_eg;
-		Eigen::Map<const Eigen::MatrixXf> * im_bo_eg, *im_bo_dx_eg, *im_bo_dy_eg;
+		Map<MatrixXf> * img_first_eg, *img_first_dx_eg, *img_first_dy_eg;
+		Map<MatrixXf> * img_second_eg, *img_second_dx_eg, *img_second_dy_eg;
 
 		image_parameters* image_param;
 		fix_parameters* fix_param;
 
-		int steps;
-		int nopw;
-		int noph;
-		int nopatches;
+		int num_patch_width;
+		int num_patch_height;
+		int num_all_patch;
 
-		std::vector<OpticalFlow::Patch*> pat; // Patch Objects
-		std::vector<Eigen::Vector2f> pt_ref; // Midpoints for reference patches
-		std::vector<Eigen::Vector2f> p_init; // starting parameters for query patches, use only 1 for depth, 2 for OF, all 4 for scene flow  
+		vector<Patch*> patches; // Patch Objects
+		vector<Vector2f> patch_reference; // Midpoints for reference patches
+		vector<Vector2f> patch_init; // starting parameters for query patches 
 
-		const PatchGrid * cg = nullptr;
+		PatchGrid * cg = nullptr;
 	};
 
 
