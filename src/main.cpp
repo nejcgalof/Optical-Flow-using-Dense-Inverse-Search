@@ -7,6 +7,7 @@
 
 using namespace cv;
 
+// Construct images and gradient pyramides
 void construct_pyramide(cv::Mat & img_fmat, cv::Mat * img_fmat_pyr, cv::Mat * img_dx_fmat_pyr, cv::Mat * img_dy_fmat_pyr, float ** img_pyr, float ** img_dx_pyr, float ** img_dy_pyr, int lv_f, int img_padding)
 {
 	for (int i = 0; i <= lv_f; ++i)  // Construct image and gradient pyramides
@@ -132,6 +133,7 @@ int main(int argc, char** argv )
 	cv::Mat img_second_dx_fmat_pyr[coarsest_scale + 1];
 	cv::Mat img_second_dy_fmat_pyr[coarsest_scale + 1];
 
+	// Construct images and gradient pyramides
 	construct_pyramide(img_first_fmat, img_first_fmat_pyr, img_first_dx_fmat_pyr, img_first_dy_fmat_pyr, img_first_pyr, img_first_dx_pyr, img_first_dy_pyr, coarsest_scale, patch_size);
 	construct_pyramide(img_second_fmat, img_second_fmat_pyr, img_second_dx_fmat_pyr, img_second_dy_fmat_pyr, img_second_pyr, img_second_dx_pyr, img_second_dy_pyr, coarsest_scale, patch_size);
 	

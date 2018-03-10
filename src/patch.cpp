@@ -22,9 +22,9 @@ namespace OpticalFlow
 		pc->patch_diff.resize(fix_param->num_points_patch, 1);
 		pc->patch_weight.resize(fix_param->num_points_patch, 1);
 
-		tmp.resize(fix_param->num_points_patch, 1);
-		dxx_tmp.resize(fix_param->num_points_patch, 1);
-		dyy_tmp.resize(fix_param->num_points_patch, 1);
+		patch_grad.resize(fix_param->num_points_patch, 1);
+		patch_grad_dx.resize(fix_param->num_points_patch, 1);
+		patch_grad_dy.resize(fix_param->num_points_patch, 1);
 	}
 
 	Patch::~Patch()
@@ -41,8 +41,10 @@ namespace OpticalFlow
 		patch_ref = patch_ref_in;
 		reset_patch();
 
-		getPatchStaticNNGrad(img_first->data(), img_first_dx->data(), img_first_dy->data(), &patch_ref, &tmp, &dxx_tmp, &dyy_tmp);
+		// Get gradient for this patch
+		get_gradients_on_patch(img_first->data(), img_first_dx->data(), img_first_dy->data(), &patch_ref, &patch_grad, &patch_grad_dx, &patch_grad_dy);
 
+		// Compute hessian matrix on this patch
 		compute_hessian_matrix();
 	}
 
@@ -52,9 +54,9 @@ namespace OpticalFlow
 		// Is square 2x2 matrix
 		// [ x^2 x*y ]
 		// [ x*y y^2 ]
-		pc->Hes(0, 0) = (dxx_tmp.array() * dxx_tmp.array()).sum();
-		pc->Hes(0, 1) = (dxx_tmp.array() * dyy_tmp.array()).sum();
-		pc->Hes(1, 1) = (dyy_tmp.array() * dyy_tmp.array()).sum();
+		pc->Hes(0, 0) = (patch_grad_dx.array() * patch_grad_dx.array()).sum();
+		pc->Hes(0, 1) = (patch_grad_dx.array() * patch_grad_dy.array()).sum();
+		pc->Hes(1, 1) = (patch_grad_dy.array() * patch_grad_dy.array()).sum();
 		pc->Hes(1, 0) = pc->Hes(0, 1);
 		if (pc->Hes.determinant() == 0)
 		{
@@ -104,7 +106,7 @@ namespace OpticalFlow
 		{
 			// if not
 			pc->hasconverged = true;
-			pc->patch_diff = tmp;
+			pc->patch_diff = patch_grad;
 			pc->hasoptstarted = true;
 		}
 		else
@@ -138,8 +140,8 @@ namespace OpticalFlow
 			pc->cnt++;
 
 			// Projection onto sd_images
-			pc->delta_p[0] = (dxx_tmp.array() * pc->patch_diff.array()).sum();
-			pc->delta_p[1] = (dyy_tmp.array() * pc->patch_diff.array()).sum();
+			pc->delta_p[0] = (patch_grad_dx.array() * pc->patch_diff.array()).sum();
+			pc->delta_p[1] = (patch_grad_dy.array() * pc->patch_diff.array()).sum();
 
 			pc->delta_p = pc->Hes.llt().solve(pc->delta_p); // solve linear system Ax=b
 
@@ -168,19 +170,14 @@ namespace OpticalFlow
 		}
 	}
 
-	// Extract patch on integer position, and gradients, No Bilinear interpolation
-	void Patch::getPatchStaticNNGrad(float* img, float* img_dx, float* img_dy, Vector2f* mid_in,
-		Matrix<float, Dynamic, 1>* tmp_in_e, Matrix<float, Dynamic, 1>*  tmp_dx_in_e, Matrix<float, Dynamic, 1>* tmp_dy_in_e)
+	void Patch::get_gradients_on_patch(float* img, float* img_dx, float* img_dy, Vector2f* patch,
+		Matrix<float, Dynamic, 1>* grad_in, Matrix<float, Dynamic, 1>*  grad_dx_in, Matrix<float, Dynamic, 1>* grad_dy_in)
 	{
-		float *tmp_in = tmp_in_e->data();
-		float *tmp_dx_in = tmp_dx_in_e->data();
-		float *tmp_dy_in = tmp_dy_in_e->data();
-
 		Eigen::Vector2i pos;
 		Eigen::Vector2i pos_it;
 
-		pos[0] = round((*mid_in)[0]) + image_param->img_padding;
-		pos[1] = round((*mid_in)[1]) + image_param->img_padding;
+		pos[0] = round((*patch)[0]) + image_param->img_padding;
+		pos[1] = round((*patch)[1]) + image_param->img_padding;
 
 		int posxx = 0;
 
@@ -195,15 +192,11 @@ namespace OpticalFlow
 				pos_it[1] = pos[1] + j;
 				int idx = pos_it[0] + pos_it[1] * image_param->tmp_w;
 
-				tmp_in[posxx] = img[idx];
-				tmp_dx_in[posxx] = img_dx[idx];
-				tmp_dy_in[posxx] = img_dy[idx];
+				grad_in[0][posxx] = img[idx];
+				grad_dx_in[0][posxx] = img_dx[idx];
+				grad_dy_in[0][posxx] = img_dy[idx];
 			}
 		}
-
-		// PATCH NORMALIZATION
-		if (fix_param->patch_normalization) // Subtract Mean
-			tmp_in_e->array() -= (tmp_in_e->sum() / fix_param->num_points_patch);
 	}
 
 	// Extract patch on float position with bilinear interpolation, no gradients.
@@ -255,8 +248,9 @@ namespace OpticalFlow
 			}
 		}
 		// PATCH NORMALIZATION
-		if (fix_param->patch_normalization) // Subtract Mean
+		if (fix_param->patch_normalization) { // Subtract Mean
 			tmp_in_e->array() -= (tmp_in_e->sum() / fix_param->num_points_patch);
+		}
 	}
 
 }

@@ -53,14 +53,14 @@ namespace OpticalFlow
 		void compute_hessian_matrix();
 		
 		// Extract patch on integer position, and gradients, No Bilinear interpolation
-		void getPatchStaticNNGrad(float* img, float* img_dx, float* img_dy, Vector2f* mid_in, Matrix<float, Dynamic, 1>* tmp_in, Matrix<float, Dynamic, 1>* tmp_dx_in, Matrix<float, Dynamic, 1>* tmp_dy_in);
+		void get_gradients_on_patch(float* img, float* img_dx, float* img_dy, Vector2f* mid_in, Matrix<float, Dynamic, 1>* grad_in, Matrix<float, Dynamic, 1>* grad_dx_in, Matrix<float, Dynamic, 1>* grad_dy_in);
 		// Extract patch on float position with bilinear interpolation, no gradients.  
 		void getPatchStaticBil(const float* img, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e);
 
 		Vector2f patch_ref; // reference point location
-		Eigen::Matrix<float, Eigen::Dynamic, 1> tmp;
-		Eigen::Matrix<float, Eigen::Dynamic, 1> dxx_tmp; // x derivative, doubles as steepest descent image for OF, Depth, SF
-		Eigen::Matrix<float, Eigen::Dynamic, 1> dyy_tmp; // y derivative, doubles as steepest descent image for OF, SF
+		Matrix<float, Dynamic, 1> patch_grad;
+		Matrix<float, Dynamic, 1> patch_grad_dx; 
+		Matrix<float, Dynamic, 1> patch_grad_dy;
 
 		Map<MatrixXf> * img_first, *img_first_dx, *img_first_dy;
 		Map<MatrixXf> * img_second, *img_second_dx, *img_second_dy;
