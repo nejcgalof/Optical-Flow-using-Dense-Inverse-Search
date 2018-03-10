@@ -32,22 +32,26 @@ namespace OpticalFlow
 		delete pc;
 	}
 
-	void Patch::InitializePatch(Map<MatrixXf> * im_ao_in, Map<MatrixXf> * im_ao_dx_in, Map<MatrixXf> * im_ao_dy_in, Vector2f pt_ref_in)
+	void Patch::init_patch(Map<MatrixXf>* img_first_in, Map<MatrixXf>* img_first_dx_in, Map<MatrixXf>* img_first_dy_in, Vector2f patch_ref_in)
 	{
-		im_ao = im_ao_in;
-		im_ao_dx = im_ao_dx_in;
-		im_ao_dy = im_ao_dy_in;
+		img_first = img_first_in;
+		img_first_dx = img_first_dx_in;
+		img_first_dy = img_first_dy_in;
 
-		pt_ref = pt_ref_in;
-		ResetPatch();
+		patch_ref = patch_ref_in;
+		reset_patch();
 
-		getPatchStaticNNGrad(im_ao->data(), im_ao_dx->data(), im_ao_dy->data(), &pt_ref, &tmp, &dxx_tmp, &dyy_tmp);
+		getPatchStaticNNGrad(img_first->data(), img_first_dx->data(), img_first_dy->data(), &patch_ref, &tmp, &dxx_tmp, &dyy_tmp);
 
-		ComputeHessian();
+		compute_hessian_matrix();
 	}
 
-	void Patch::ComputeHessian()
+	void Patch::compute_hessian_matrix()
 	{
+		// The "Hessian matrix" of a multivariable function, organizes all second partial derivatives into a matrix
+		// Is square 2x2 matrix
+		// [ x^2 x*y ]
+		// [ x*y y^2 ]
 		pc->Hes(0, 0) = (dxx_tmp.array() * dxx_tmp.array()).sum();
 		pc->Hes(0, 1) = (dxx_tmp.array() * dyy_tmp.array()).sum();
 		pc->Hes(1, 1) = (dyy_tmp.array() * dyy_tmp.array()).sum();
@@ -59,24 +63,24 @@ namespace OpticalFlow
 		}
 	}
 
-	void Patch::SetTargetImage(Map<MatrixXf> * im_bo_in, Map<MatrixXf> * im_bo_dx_in, Map<MatrixXf> * im_bo_dy_in)
+	void Patch::set_target_image(Map<MatrixXf> * img_second_in, Map<MatrixXf> * img_second_dx_in, Map<MatrixXf> * img_second_dy_in)
 	{
-		im_bo = im_bo_in;
-		im_bo_dx = im_bo_dx_in;
-		im_bo_dy = im_bo_dy_in;
+		img_second = img_second_in;
+		img_second_dx = img_second_dx_in;
+		img_second_dy = img_second_dy_in;
 
-		ResetPatch();
+		reset_patch();
 	}
 
-	void Patch::ResetPatch()
+	void Patch::reset_patch()
 	{
-		pc->hasconverged = 0;
-		pc->hasoptstarted = 0;
+		pc->hasconverged = false;
+		pc->hasoptstarted = false;
 
-		pc->pt_st = pt_ref;
-		pc->pt_iter = pt_ref;
+		pc->pt_st = patch_ref;
+		pc->pt_iter = patch_ref;
 
-		pc->p_in.setZero();
+		pc->patch_in.setZero();
 		pc->p_iter.setZero();
 		pc->delta_p.setZero();
 
@@ -84,51 +88,52 @@ namespace OpticalFlow
 		pc->invalid = false;
 	}
 
-	void Patch::OptimizeStart(const Eigen::Vector2f p_in_arg)
+	void Patch::OptimizeStart(Vector2f patch_in)
 	{
-		pc->p_in = p_in_arg;
-		pc->p_iter = p_in_arg;
+		pc->patch_in = patch_in;
+		pc->p_iter = patch_in;
 
 		// convert from input parameters to 2D query location(s) for patches
-		pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
+		pc->pt_iter = patch_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
 
 		// save starting location, only needed for outlier check
 		pc->pt_st = pc->pt_iter;
 
 		//Check if initial position is already invalid
-		if (pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb ||    // check if patch left valid image region
-			pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
+		if (pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb || pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
 		{
-			pc->hasconverged = 1;
+			// if not
+			pc->hasconverged = true;
 			pc->patch_diff = tmp;
-			pc->hasoptstarted = 1;
+			pc->hasoptstarted = true;
 		}
 		else
 		{
 			pc->cnt = 0; // reset iteration counter
-			pc->hasconverged = 0;
+			pc->hasconverged = false;
 
-			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->patch_diff));
+			getPatchStaticBil(img_second->data(), &(pc->pt_iter), &(pc->patch_diff));
+			
+			// If max iteration, patch converged - we stop
 			if ((pc->cnt > fix_param->iterations)) {
-				pc->hasconverged = 1;
+				pc->hasconverged = true;
 			}
 
-			pc->hasoptstarted = 1;
+			pc->hasoptstarted = true;
 			pc->invalid = false;
 		}
 	}
 
-	void Patch::OptimizeIter(const Eigen::Vector2f p_in_arg, const bool untilconv)
+	void Patch::inverse_search(Vector2f patch_in)
 	{
 		if (!pc->hasoptstarted)
 		{
-			ResetPatch();
-			OptimizeStart(p_in_arg);
+			reset_patch();
+			OptimizeStart(patch_in);
 		}
-		int oldcnt = pc->cnt;
 
-		// optimize patch until convergence, or do only one iteration if DIS visualization is used
-		while (!(pc->hasconverged || (untilconv == false && (pc->cnt > oldcnt))))
+		// Optimize patch until convergence
+		while (!pc->hasconverged)
 		{
 			pc->cnt++;
 
@@ -136,38 +141,36 @@ namespace OpticalFlow
 			pc->delta_p[0] = (dxx_tmp.array() * pc->patch_diff.array()).sum();
 			pc->delta_p[1] = (dyy_tmp.array() * pc->patch_diff.array()).sum();
 
-			pc->delta_p = pc->Hes.llt().solve(pc->delta_p); // solve linear system
+			pc->delta_p = pc->Hes.llt().solve(pc->delta_p); // solve linear system Ax=b
 
 			pc->p_iter -= pc->delta_p; // update flow vector
 
 															   // compute patch locations based on new parameter vector
-			pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
+			pc->pt_iter = patch_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
 
 			// check if patch(es) moved too far from starting location, if yes, stop iteration and reset to starting location
 			if ((pc->pt_st - pc->pt_iter).norm() > fix_param->outlierthresh  // check if query patch moved more than >padval from starting location -> most likely outlier
 				||
-				pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb ||    // check patch left valid image region
+				pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb ||
 				pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
 			{
-				pc->p_iter = pc->p_in; // reset
-				pc->pt_iter = pt_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
-				pc->hasconverged = 1;
-				pc->hasoptstarted = 1;
+				pc->p_iter = pc->patch_in; // reset
+				pc->pt_iter = patch_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
+				pc->hasconverged = true;
+				pc->hasoptstarted = true;
 			}
 
-			getPatchStaticBil(im_bo->data(), &(pc->pt_iter), &(pc->patch_diff));
+			getPatchStaticBil(img_second->data(), &(pc->pt_iter), &(pc->patch_diff));
+			// If max iteration, patch converged - we stop
 			if ((pc->cnt > fix_param->iterations)) {
-				pc->hasconverged = 1;
+				pc->hasconverged = true;
 			}
 		}
 	}
 
 	// Extract patch on integer position, and gradients, No Bilinear interpolation
-	void Patch::getPatchStaticNNGrad(const float* img, const float* img_dx, const float* img_dy,
-		const Eigen::Vector2f* mid_in,
-		Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e,
-		Eigen::Matrix<float, Eigen::Dynamic, 1>*  tmp_dx_in_e,
-		Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_dy_in_e)
+	void Patch::getPatchStaticNNGrad(float* img, float* img_dx, float* img_dy, Vector2f* mid_in,
+		Matrix<float, Dynamic, 1>* tmp_in_e, Matrix<float, Dynamic, 1>*  tmp_dx_in_e, Matrix<float, Dynamic, 1>* tmp_dy_in_e)
 	{
 		float *tmp_in = tmp_in_e->data();
 		float *tmp_dx_in = tmp_dx_in_e->data();

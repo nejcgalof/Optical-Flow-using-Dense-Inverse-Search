@@ -17,9 +17,11 @@ namespace OpticalFlow
 		Eigen::Matrix<float, Eigen::Dynamic, 1> patch_weight; // absolute error image
 
 		Eigen::Matrix<float, 2, 2> Hes; // Hessian for optimization
-		Eigen::Vector2f p_in, p_iter, delta_p; // point position, displacement to starting position, iteration update
-		Eigen::Vector2f pt_iter;
-		Eigen::Vector2f pt_st;
+		Vector2f patch_in;  // point position
+		Vector2f p_iter; //displacement to starting position
+		Vector2f delta_p; // iteration update
+		Vector2f pt_iter; 
+		Vector2f pt_st; // start positions
 
 		int cnt = 0;
 		bool invalid = false;
@@ -34,10 +36,10 @@ namespace OpticalFlow
 		Patch(image_parameters* image_param_in, fix_parameters* fix_param_in);
 		~Patch();
 
-		void InitializePatch(Map<MatrixXf> * im_ao_in, Map<MatrixXf> * im_ao_dx_in, Map<MatrixXf> * im_ao_dy_in, Vector2f pt_ref_in);
-		void SetTargetImage(Map<MatrixXf> * im_bo_in, Map<MatrixXf> * im_bo_dx_in, Map<MatrixXf> * im_bo_dy_in);
+		void init_patch(Map<MatrixXf>* img_first_in, Map<MatrixXf>* img_first_dx_in, Map<MatrixXf>* img_first_dy_in, Vector2f pt_ref_in);
+		void set_target_image(Map<MatrixXf>* img_second_in, Map<MatrixXf>* img_second_dx_in, Map<MatrixXf>* img_second_dy_in);
 
-		void OptimizeIter(const Eigen::Vector2f p_in_arg, const bool untilconv);
+		void inverse_search(Vector2f patch_in);
 
 		Eigen::Vector2f GetPointPos()  { return pc->pt_iter; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
 		bool IsValid() { return (!pc->invalid); }
@@ -46,22 +48,22 @@ namespace OpticalFlow
 
 	private:
 
-		void OptimizeStart(const Eigen::Vector2f p_in_arg);
-		void ResetPatch();
-		void ComputeHessian();
+		void OptimizeStart(Vector2f patch_in);
+		void reset_patch();
+		void compute_hessian_matrix();
 		
 		// Extract patch on integer position, and gradients, No Bilinear interpolation
-		void getPatchStaticNNGrad(const float* img, const float* img_dx, const float* img_dy, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in, Eigen::Matrix<float, Eigen::Dynamic, 1>*  tmp_dx_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_dy_in);
+		void getPatchStaticNNGrad(float* img, float* img_dx, float* img_dy, Vector2f* mid_in, Matrix<float, Dynamic, 1>* tmp_in, Matrix<float, Dynamic, 1>* tmp_dx_in, Matrix<float, Dynamic, 1>* tmp_dy_in);
 		// Extract patch on float position with bilinear interpolation, no gradients.  
 		void getPatchStaticBil(const float* img, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e);
 
-		Eigen::Vector2f pt_ref; // reference point location
+		Vector2f patch_ref; // reference point location
 		Eigen::Matrix<float, Eigen::Dynamic, 1> tmp;
 		Eigen::Matrix<float, Eigen::Dynamic, 1> dxx_tmp; // x derivative, doubles as steepest descent image for OF, Depth, SF
 		Eigen::Matrix<float, Eigen::Dynamic, 1> dyy_tmp; // y derivative, doubles as steepest descent image for OF, SF
 
-		Map<MatrixXf> * im_ao, *im_ao_dx, *im_ao_dy;
-		Map<MatrixXf> * im_bo, *im_bo_dx, *im_bo_dy;
+		Map<MatrixXf> * img_first, *img_first_dx, *img_first_dy;
+		Map<MatrixXf> * img_second, *img_second_dx, *img_second_dy;
 
 		image_parameters* image_param;
 		fix_parameters* fix_param;

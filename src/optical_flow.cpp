@@ -79,7 +79,7 @@ namespace OpticalFlow
 			}
 
 			// Dense Inverse Search. (Step 3 in Algorithm 1 of paper)                                          
-			grids[s]->Optimize();
+			grids[s]->inverse_search(); // Inverse search for each patch
 
 			// Densification. (Step 4 in Algorithm 1 of paper)                                                                    
 			float *tmp_ptr = flows[s];

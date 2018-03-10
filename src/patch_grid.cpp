@@ -65,11 +65,6 @@ namespace OpticalFlow
 		}
 	}
 
-	void PatchGrid::SetComplGrid(PatchGrid *cg_in)
-	{
-		cg = cg_in;
-	}
-
 	void PatchGrid::init_grid(float* img_first_in, float* img_first_dx_in, float* img_first_dy_in)
 	{
 		img_first = img_first_in;
@@ -81,7 +76,7 @@ namespace OpticalFlow
 
 		for (int i = 0; i < num_all_patch; ++i)
 		{
-			patches[i]->InitializePatch(img_first_eg, img_first_dx_eg, img_first_dy_eg, patch_reference[i]);
+			patches[i]->init_patch(img_first_eg, img_first_dx_eg, img_first_dy_eg, patch_reference[i]);
 			patch_init[i].setZero();
 		}
 	}
@@ -97,15 +92,16 @@ namespace OpticalFlow
 		img_second_dy_eg = new Map<MatrixXf>(img_second_dy, image_param->height, image_param->width);
 
 		for (int i = 0; i < num_all_patch; ++i) {
-			patches[i]->SetTargetImage(img_second_eg, img_second_dx_eg, img_second_dy_eg);
+			patches[i]->set_target_image(img_second_eg, img_second_dx_eg, img_second_dy_eg);
 		}
 	}
 
-	void PatchGrid::Optimize()
+	void PatchGrid::inverse_search()
 	{
+		// Inverse search for each patch
 		for (int i = 0; i < num_all_patch; ++i)
 		{
-			patches[i]->OptimizeIter(patch_init[i], true); // optimize until convergence  
+			patches[i]->inverse_search(patch_init[i]); // optimize until convergence  
 		}
 	}
 

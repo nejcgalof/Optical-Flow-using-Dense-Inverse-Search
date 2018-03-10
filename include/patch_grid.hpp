@@ -23,9 +23,7 @@ namespace OpticalFlow
 		void AggregateFlowDense(float *flowout) const;
 
 		// Optimizes grid to convergence of each patch
-		void Optimize();
-
-		void SetComplGrid(PatchGrid *cg_in);
+		void inverse_search();
 
 		int get_num_all_patch() { return num_all_patch; }
 		Vector2f GetRefPatchPos(int i) { return patch_reference[i]; } // Get reference  patch position
