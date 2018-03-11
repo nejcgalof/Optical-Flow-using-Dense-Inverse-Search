@@ -52,8 +52,9 @@ namespace OpticalFlow
 		void reset_patch();
 		void compute_hessian_matrix();
 		
-		// Extract patch on integer position, and gradients, No Bilinear interpolation
-		void get_gradients_on_patch(float* img, float* img_dx, float* img_dy, Vector2f* mid_in, Matrix<float, Dynamic, 1>* grad_in, Matrix<float, Dynamic, 1>* grad_dx_in, Matrix<float, Dynamic, 1>* grad_dy_in);
+		// Extract gradient on this patch
+		void get_gradients_on_patch();
+
 		// Extract patch on float position with bilinear interpolation, no gradients.  
 		void getPatchStaticBil(const float* img, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e);
 

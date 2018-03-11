@@ -41,11 +41,39 @@ namespace OpticalFlow
 		patch_ref = patch_ref_in;
 		reset_patch();
 
-		// Get gradient for this patch
-		get_gradients_on_patch(img_first->data(), img_first_dx->data(), img_first_dy->data(), &patch_ref, &patch_grad, &patch_grad_dx, &patch_grad_dy);
+		// Get gradient for this reference patch
+		get_gradients_on_patch();
 
 		// Compute hessian matrix on this patch
 		compute_hessian_matrix();
+	}
+
+	void Patch::get_gradients_on_patch()
+	{
+		Eigen::Vector2i pos;
+		Eigen::Vector2i pos_it;
+
+		pos[0] = round(patch_ref[0]) + image_param->img_padding;
+		pos[1] = round(patch_ref[1]) + image_param->img_padding;
+
+		int posxx = 0;
+
+		int lb = -fix_param->patch_size / 2;
+		int ub = fix_param->patch_size / 2 - 1;
+
+		for (int j = lb; j <= ub; ++j)
+		{
+			for (int i = lb; i <= ub; ++i, ++posxx)
+			{
+				pos_it[0] = pos[0] + i;
+				pos_it[1] = pos[1] + j;
+				int idx = pos_it[0] + pos_it[1] * image_param->tmp_w;
+				
+				patch_grad[posxx] = img_first->data()[idx];
+				patch_grad_dx[posxx] = img_first_dx->data()[idx];
+				patch_grad_dy[posxx] = img_first_dy->data()[idx];
+			}
+		}
 	}
 
 	void Patch::compute_hessian_matrix()
@@ -54,6 +82,7 @@ namespace OpticalFlow
 		// Is square 2x2 matrix
 		// [ x^2 x*y ]
 		// [ x*y y^2 ]
+		// H = sum (S*S) for each pixel; S is partial derivate of image gradient
 		pc->Hes(0, 0) = (patch_grad_dx.array() * patch_grad_dx.array()).sum();
 		pc->Hes(0, 1) = (patch_grad_dx.array() * patch_grad_dy.array()).sum();
 		pc->Hes(1, 1) = (patch_grad_dy.array() * patch_grad_dy.array()).sum();
@@ -143,8 +172,11 @@ namespace OpticalFlow
 			pc->delta_p[0] = (patch_grad_dx.array() * pc->patch_diff.array()).sum();
 			pc->delta_p[1] = (patch_grad_dy.array() * pc->patch_diff.array()).sum();
 
-			pc->delta_p = pc->Hes.llt().solve(pc->delta_p); // solve linear system Ax=b
+			// Solve linear system Ax=b for delta u
+			// A is LU decomposition of Hessian
+			pc->delta_p = pc->Hes.lu().solve(pc->delta_p);
 
+			// Update warp parameter u
 			pc->p_iter -= pc->delta_p; // update flow vector
 
 															   // compute patch locations based on new parameter vector
@@ -166,35 +198,6 @@ namespace OpticalFlow
 			// If max iteration, patch converged - we stop
 			if ((pc->cnt > fix_param->iterations)) {
 				pc->hasconverged = true;
-			}
-		}
-	}
-
-	void Patch::get_gradients_on_patch(float* img, float* img_dx, float* img_dy, Vector2f* patch,
-		Matrix<float, Dynamic, 1>* grad_in, Matrix<float, Dynamic, 1>*  grad_dx_in, Matrix<float, Dynamic, 1>* grad_dy_in)
-	{
-		Eigen::Vector2i pos;
-		Eigen::Vector2i pos_it;
-
-		pos[0] = round((*patch)[0]) + image_param->img_padding;
-		pos[1] = round((*patch)[1]) + image_param->img_padding;
-
-		int posxx = 0;
-
-		int lb = -fix_param->patch_size / 2;
-		int ub = fix_param->patch_size / 2 - 1;
-
-		for (int j = lb; j <= ub; ++j)
-		{
-			for (int i = lb; i <= ub; ++i, ++posxx)
-			{
-				pos_it[0] = pos[0] + i;
-				pos_it[1] = pos[1] + j;
-				int idx = pos_it[0] + pos_it[1] * image_param->tmp_w;
-
-				grad_in[0][posxx] = img[idx];
-				grad_dx_in[0][posxx] = img_dx[idx];
-				grad_dy_in[0][posxx] = img_dy[idx];
 			}
 		}
 	}
