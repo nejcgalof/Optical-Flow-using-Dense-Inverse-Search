@@ -89,7 +89,7 @@ int main(int argc, char** argv )
 	
 	// PARAMETERS
 
-	int iterations = 1000; // Max. iterations
+	int iterations = 100; // Max. iterations
 	int patch_size = 8; // Rectangular patch size in (pixel)
 	const int coarsest_scale = 3; // Coarsest scale in multi-scale pyramid
 	int finest_scale = 0; // Finest scale in multi-scale pyramide

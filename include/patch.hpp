@@ -13,21 +13,18 @@ namespace OpticalFlow
 		bool hasoptstarted;
 
 		// reference/template patch 
-		Eigen::Matrix<float, Eigen::Dynamic, 1> patch_diff; // image error to reference image
-		Eigen::Matrix<float, Eigen::Dynamic, 1> patch_weight; // absolute error image
+		Matrix<float, Eigen::Dynamic, 1> patch_diff; // image error to reference image
 
-		Eigen::Matrix<float, 2, 2> Hes; // Hessian for optimization
+		Matrix<float, 2, 2> Hes; // Hessian for optimization
 		Vector2f patch_in;  // point position
-		Vector2f p_iter; //displacement to starting position
-		Vector2f delta_p; // iteration update
-		Vector2f pt_iter; 
+		Vector2f p_iter; // warping vector u
+		Vector2f delta_p; // iteration update delta_u
+		Vector2f pt_iter; // result of W(x,u) patch position 
 		Vector2f pt_st; // start positions
 
-		int cnt = 0;
+		int counter_iter = 0;
 		bool invalid = false;
 	} patch_state;
-
-
 
 	class Patch
 	{
@@ -43,7 +40,7 @@ namespace OpticalFlow
 
 		Eigen::Vector2f GetPointPos()  { return pc->pt_iter; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
 		bool IsValid() { return (!pc->invalid); }
-		float * GetpWeightPtr() { return (float*)pc->patch_weight.data(); } // Return data pointer to image error patch, used in efficient indexing for densification in patchgrid class
+		//float * GetpWeightPtr() { return (float*)pc->patch_weight.data(); } // Return data pointer to image error patch, used in efficient indexing for densification in patchgrid class
 		Eigen::Vector2f* GetParam() { return &(pc->p_iter); }   // get current iteration parameters
 
 	private:
@@ -58,7 +55,7 @@ namespace OpticalFlow
 		// Extract patch on float position with bilinear interpolation, no gradients.  
 		void getPatchStaticBil(const float* img, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e);
 
-		Vector2f patch_ref; // reference point location
+		Vector2f patch_ref; // reference point location (center of patch) paper: pixel x
 		Matrix<float, Dynamic, 1> patch_grad;
 		Matrix<float, Dynamic, 1> patch_grad_dx; 
 		Matrix<float, Dynamic, 1> patch_grad_dy;

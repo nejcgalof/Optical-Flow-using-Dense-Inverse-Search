@@ -20,7 +20,6 @@ namespace OpticalFlow
 	{
 		pc = new patch_state;
 		pc->patch_diff.resize(fix_param->num_points_patch, 1);
-		pc->patch_weight.resize(fix_param->num_points_patch, 1);
 
 		patch_grad.resize(fix_param->num_points_patch, 1);
 		patch_grad_dx.resize(fix_param->num_points_patch, 1);
@@ -50,8 +49,8 @@ namespace OpticalFlow
 
 	void Patch::get_gradients_on_patch()
 	{
-		Eigen::Vector2i pos;
-		Eigen::Vector2i pos_it;
+		Vector2i pos;
+		Vector2i pos_it;
 
 		pos[0] = round(patch_ref[0]) + image_param->img_padding;
 		pos[1] = round(patch_ref[1]) + image_param->img_padding;
@@ -115,7 +114,7 @@ namespace OpticalFlow
 		pc->p_iter.setZero();
 		pc->delta_p.setZero();
 
-		pc->cnt = 0;
+		pc->counter_iter = 0;
 		pc->invalid = false;
 	}
 
@@ -124,14 +123,15 @@ namespace OpticalFlow
 		pc->patch_in = patch_in;
 		pc->p_iter = patch_in;
 
-		// convert from input parameters to 2D query location(s) for patches
-		pc->pt_iter = patch_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
+		// Warp with u W(x,u) = (x+u,y+v)
+		pc->pt_iter = patch_ref + pc->p_iter;
 
 		// save starting location, only needed for outlier check
 		pc->pt_st = pc->pt_iter;
 
 		//Check if initial position is already invalid
-		if (pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb || pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
+		if (pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb 
+			|| pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
 		{
 			// if not
 			pc->hasconverged = true;
@@ -140,13 +140,13 @@ namespace OpticalFlow
 		}
 		else
 		{
-			pc->cnt = 0; // reset iteration counter
+			pc->counter_iter = 0; // reset iteration counter
 			pc->hasconverged = false;
 
 			getPatchStaticBil(img_second->data(), &(pc->pt_iter), &(pc->patch_diff));
 			
 			// If max iteration, patch converged - we stop
-			if ((pc->cnt > fix_param->iterations)) {
+			if ((pc->counter_iter > fix_param->iterations)) {
 				pc->hasconverged = true;
 			}
 
@@ -166,21 +166,22 @@ namespace OpticalFlow
 		// Optimize patch until convergence
 		while (!pc->hasconverged)
 		{
-			pc->cnt++;
+			pc->counter_iter++;
 
-			// Projection onto sd_images
+			// W(x,u+delta_u)
+			// Compute the sum, which includes the image difference multiplication with the image gradients
 			pc->delta_p[0] = (patch_grad_dx.array() * pc->patch_diff.array()).sum();
 			pc->delta_p[1] = (patch_grad_dy.array() * pc->patch_diff.array()).sum();
 
 			// Solve linear system Ax=b for delta u
-			// A is LU decomposition of Hessian
+			// A is LU decomposition of Hessian matrix (eigen need this to solve - also can use LLT etc ...)
 			pc->delta_p = pc->Hes.lu().solve(pc->delta_p);
 
-			// Update warp parameter u
+			// Update warp parameter u: In optical flow this become u<-u-delta_u
 			pc->p_iter -= pc->delta_p; // update flow vector
-
-															   // compute patch locations based on new parameter vector
-			pc->pt_iter = patch_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
+		   
+			// Warp with warping vector u(u,v): W(x,u) = (x+u,y+v)
+			pc->pt_iter = patch_ref + pc->p_iter;
 
 			// check if patch(es) moved too far from starting location, if yes, stop iteration and reset to starting location
 			if ((pc->pt_st - pc->pt_iter).norm() > fix_param->outlierthresh  // check if query patch moved more than >padval from starting location -> most likely outlier
@@ -195,8 +196,9 @@ namespace OpticalFlow
 			}
 
 			getPatchStaticBil(img_second->data(), &(pc->pt_iter), &(pc->patch_diff));
+			
 			// If max iteration, patch converged - we stop
-			if ((pc->cnt > fix_param->iterations)) {
+			if ((pc->counter_iter > fix_param->iterations)) {
 				pc->hasconverged = true;
 			}
 		}
@@ -207,10 +209,10 @@ namespace OpticalFlow
 	{
 		float *tmp_in = tmp_in_e->data();
 
-		Eigen::Vector2f resid;
-		Eigen::Vector4f we; // bilinear weight vector
-		Eigen::Vector4i pos;
-		Eigen::Vector2i pos_it;
+		Vector2f resid;
+		Vector4f we; // bilinear weight vector
+		Vector4i pos;
+		Vector2i pos_it;
 
 		// Compute the bilinear weight vector, for patch without orientation/scale change -> weight vector is constant for all pixels
 		pos[0] = ceil((*mid_in)[0] + .00001f); // ensure rounding up to natural numbers
@@ -228,7 +230,6 @@ namespace OpticalFlow
 		pos[0] += image_param->img_padding;
 		pos[1] += image_param->img_padding;
 
-		float * tmp_it = tmp_in;
 		const float * img_a, *img_b, *img_c, *img_d, *img_e;
 
 		img_e = img + pos[0] - fix_param->patch_size / 2;
@@ -245,9 +246,9 @@ namespace OpticalFlow
 
 
 			for (pos_it[0] = pos[0] + lb; pos_it[0] <= pos[0] + ub; ++pos_it[0],
-				++tmp_it, ++img_a, ++img_b, ++img_c, ++img_d)
+				++tmp_in, ++img_a, ++img_b, ++img_c, ++img_d)
 			{
-				(*tmp_it) = we[0] * (*img_a) + we[1] * (*img_b) + we[2] * (*img_c) + we[3] * (*img_d);
+				(*tmp_in) = we[0] * (*img_a) + we[1] * (*img_b) + we[2] * (*img_c) + we[3] * (*img_d);
 			}
 		}
 		// PATCH NORMALIZATION

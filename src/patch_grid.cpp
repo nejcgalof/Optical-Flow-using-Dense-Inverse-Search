@@ -133,14 +133,12 @@ namespace OpticalFlow
 				const Eigen::Vector2f* fl = patches[ip]->GetParam(); // flow displacement of this patch
 				Eigen::Vector2f flnew;
 
-				const float * pweight = patches[ip]->GetpWeightPtr(); // use image error as weight
-
 				int lb = -fix_param->patch_size / 2;
 				int ub = fix_param->patch_size / 2 - 1;
 
 				for (int y = lb; y <= ub; ++y)
 				{
-					for (int x = lb; x <= ub; ++x, ++pweight)
+					for (int x = lb; x <= ub; ++x)
 					{
 						int yt = (y + patch_reference[ip][1]);
 						int xt = (x + patch_reference[ip][0]);
@@ -150,7 +148,7 @@ namespace OpticalFlow
 
 							int i = yt*image_param->width + xt;
 
-							float absw = 1.0f / (float)(std::max(fix_param->minerrval, *pweight));
+							float absw = 1.0f / (float)fix_param->minerrval;
 
 							flnew = (*fl) * absw;
 							we[i] += absw;
@@ -162,82 +160,7 @@ namespace OpticalFlow
 				}
 			}
 		}
-
-		// if complementary (forward-backward merging) is given, integrate negative backward flow as well
-		if (cg)
-		{
-			Eigen::Vector4f wbil; // bilinear weight vector
-			Eigen::Vector4i pos;
-
-			for (int ip = 0; ip < cg->num_all_patch; ++ip)
-			{
-				if (cg->patches[ip]->IsValid())
-				{
-					const Eigen::Vector2f* fl = (cg->patches[ip]->GetParam()); // flow displacement of this patch
-					Eigen::Vector2f flnew;
-
-					const Eigen::Vector2f rppos = cg->patches[ip]->GetPointPos(); // get patch position after optimization
-					const float * pweight = cg->patches[ip]->GetpWeightPtr(); // use image error as weight
-
-					Eigen::Vector2f resid;
-
-					// compute bilinear weight vector
-					pos[0] = ceil(rppos[0] + .00001); // make sure they are rounded up to natural number
-					pos[1] = ceil(rppos[1] + .00001); // make sure they are rounded up to natural number
-					pos[2] = floor(rppos[0]);
-					pos[3] = floor(rppos[1]);
-
-					resid[0] = rppos[0] - pos[2];
-					resid[1] = rppos[1] - pos[3];
-					wbil[0] = resid[0] * resid[1];
-					wbil[1] = (1 - resid[0])*resid[1];
-					wbil[2] = resid[0] * (1 - resid[1]);
-					wbil[3] = (1 - resid[0])*(1 - resid[1]);
-
-					int lb = -fix_param->patch_size / 2;
-					int ub = fix_param->patch_size / 2 - 1;
-
-
-					for (int y = lb; y <= ub; ++y)
-					{
-						for (int x = lb; x <= ub; ++x, ++pweight)
-						{
-
-							int yt = y + pos[1];
-							int xt = x + pos[0];
-							if (xt >= 1 && yt >= 1 && xt < (image_param->width - 1) && yt < (image_param->height - 1))
-							{
-								float absw = 1.0f / (float)(std::max(fix_param->minerrval, *pweight));
-								flnew = (*fl) * absw;
-
-								int idxcc = xt + yt   *image_param->width;
-								int idxfc = (xt - 1) + yt   *image_param->width;
-								int idxcf = xt + (yt - 1)*image_param->width;
-								int idxff = (xt - 1) + (yt - 1)*image_param->width;
-
-								we[idxcc] += wbil[0] * absw;
-								we[idxfc] += wbil[1] * absw;
-								we[idxcf] += wbil[2] * absw;
-								we[idxff] += wbil[3] * absw;
-
-								flowout[2 * idxcc] -= wbil[0] * flnew[0];   // use reversed flow 
-								flowout[2 * idxcc + 1] -= wbil[0] * flnew[1];
-
-								flowout[2 * idxfc] -= wbil[1] * flnew[0];
-								flowout[2 * idxfc + 1] -= wbil[1] * flnew[1];
-
-								flowout[2 * idxcf] -= wbil[2] * flnew[0];
-								flowout[2 * idxcf + 1] -= wbil[2] * flnew[1];
-
-								flowout[2 * idxff] -= wbil[3] * flnew[0];
-								flowout[2 * idxff + 1] -= wbil[3] * flnew[1];
-							}
-						}
-					}
-				}
-			}
-		}
-
+		
 		// normalize each pixel by dividing displacement by aggregated weights from all patches
 		for (int yi = 0; yi < image_param->height; ++yi)
 		{
@@ -254,5 +177,4 @@ namespace OpticalFlow
 
 		delete[] we;
 	}
-
 }

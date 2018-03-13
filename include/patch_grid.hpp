@@ -47,10 +47,6 @@ namespace OpticalFlow
 
 		vector<Patch*> patches; // Patch Objects
 		vector<Vector2f> patch_reference; // Midpoints for reference patches
-		vector<Vector2f> patch_init; // starting parameters for query patches 
-
-		PatchGrid * cg = nullptr;
+		vector<Vector2f> patch_init; // starting parameters for query patches
 	};
-
-
 }
