@@ -12,8 +12,8 @@ namespace OpticalFlow
 		bool hasconverged;
 		bool hasoptstarted;
 
-		// reference/template patch 
-		Matrix<float, Eigen::Dynamic, 1> patch_diff; // image error to reference image
+		// reference/second patch 
+		Matrix<float, Eigen::Dynamic, 1> patch_diff; // image error to reference/second image
 
 		Matrix<float, 2, 2> Hes; // Hessian for optimization
 		Vector2f patch_in;  // point position
@@ -40,7 +40,7 @@ namespace OpticalFlow
 
 		Eigen::Vector2f GetPointPos()  { return pc->pt_iter; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
 		bool IsValid() { return (!pc->invalid); }
-		//float * GetpWeightPtr() { return (float*)pc->patch_weight.data(); } // Return data pointer to image error patch, used in efficient indexing for densification in patchgrid class
+		
 		Eigen::Vector2f* GetParam() { return &(pc->p_iter); }   // get current iteration parameters
 
 	private:
@@ -52,8 +52,8 @@ namespace OpticalFlow
 		// Extract gradient on this patch
 		void get_gradients_on_patch();
 
-		// Extract patch on float position with bilinear interpolation, no gradients.  
-		void getPatchStaticBil(const float* img, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e);
+		// Calculate image patch with linear interpolation on second image 
+		void get_patch_second_image();
 
 		Vector2f patch_ref; // reference point location (center of patch) paper: pixel x
 		Matrix<float, Dynamic, 1> patch_grad;

@@ -1,13 +1,10 @@
 #include <iostream>
 #include <string>
 #include <vector>
-
-#include <thread>
-
 #include <Eigen/Core>
 #include <Eigen/LU>
 #include <Eigen/Dense>
-#include <stdio.h>  
+
 #include "patch.hpp"
 
 using namespace std;
@@ -143,7 +140,7 @@ namespace OpticalFlow
 			pc->counter_iter = 0; // reset iteration counter
 			pc->hasconverged = false;
 
-			getPatchStaticBil(img_second->data(), &(pc->pt_iter), &(pc->patch_diff));
+			get_patch_second_image();
 			
 			// If max iteration, patch converged - we stop
 			if ((pc->counter_iter > fix_param->iterations)) {
@@ -169,7 +166,7 @@ namespace OpticalFlow
 			pc->counter_iter++;
 
 			// W(x,u+delta_u)
-			// Compute the sum, which includes the image difference multiplication with the image gradients
+			// Compute the sum, which includes the image difference (second image) multiplication with the image gradients
 			pc->delta_p[0] = (patch_grad_dx.array() * pc->patch_diff.array()).sum();
 			pc->delta_p[1] = (patch_grad_dy.array() * pc->patch_diff.array()).sum();
 
@@ -195,7 +192,7 @@ namespace OpticalFlow
 				pc->hasoptstarted = true;
 			}
 
-			getPatchStaticBil(img_second->data(), &(pc->pt_iter), &(pc->patch_diff));
+			get_patch_second_image();
 			
 			// If max iteration, patch converged - we stop
 			if ((pc->counter_iter > fix_param->iterations)) {
@@ -204,59 +201,69 @@ namespace OpticalFlow
 		}
 	}
 
-	// Extract patch on float position with bilinear interpolation, no gradients.
-	void Patch::getPatchStaticBil(const float* img, const Eigen::Vector2f* mid_in, Eigen::Matrix<float, Eigen::Dynamic, 1>* tmp_in_e)
+	// Calculate image patch with linear interpolation on second image
+	// Patch is not always on real position, this is reason for linear interpolation
+	void Patch::get_patch_second_image()
 	{
-		float *tmp_in = tmp_in_e->data();
+		Vector4f weight;
+		Vector2i pos;
 
-		Vector2f resid;
-		Vector4f we; // bilinear weight vector
-		Vector4i pos;
-		Vector2i pos_it;
+		// linear interpolation: calculate weights
+		// l=floor(x)
+		// k=floor(y)
+		// a=x-l
+		// b=y-k
+		// (1-a)(1-b)*I(l,k)  <-weight[0] = (1-a)*(1-b)
+		// + a*(1-b)*I(l+1,k) <-weight[1] = a*(1-b)
+		// + b*(1-a)*I(l,k+1) <-weight[2] = b*(1-a)
+		// + a*b*I(l+1,k+1) <-weight[3] = a*b
 
-		// Compute the bilinear weight vector, for patch without orientation/scale change -> weight vector is constant for all pixels
-		pos[0] = ceil((*mid_in)[0] + .00001f); // ensure rounding up to natural numbers
-		pos[1] = ceil((*mid_in)[1] + .00001f);
-		pos[2] = floor((*mid_in)[0]);
-		pos[3] = floor((*mid_in)[1]);
+		float l = floor((pc->pt_iter)[0]);
+		float k = floor((pc->pt_iter)[1]);
 
-		resid[0] = (*mid_in)[0] - (float)pos[2];
-		resid[1] = (*mid_in)[1] - (float)pos[3];
-		we[0] = resid[0] * resid[1];
-		we[1] = (1 - resid[0])*resid[1];
-		we[2] = resid[0] * (1 - resid[1]);
-		we[3] = (1 - resid[0])*(1 - resid[1]);
+		float a = (pc->pt_iter)[0] - l;
+		float b = (pc->pt_iter)[1] - k;
+		weight[0] = (1 - a)*(1 - b);
+		weight[1] = a * (1 - b);
+		weight[2] = b * (1 - a);
+		weight[3] = a * b;
 
-		pos[0] += image_param->img_padding;
-		pos[1] += image_param->img_padding;
+		// Find nearest real position (x,y)
+		pos[0] = ceil((pc->pt_iter)[0] + .00001f) + image_param->img_padding;
+		pos[1] = ceil((pc->pt_iter)[1] + .00001f) + image_param->img_padding;
 
-		const float * img_a, *img_b, *img_c, *img_d, *img_e;
-
-		img_e = img + pos[0] - fix_param->patch_size / 2;
-
+		// lb and up for patch - for moving
 		int lb = -fix_param->patch_size / 2;
 		int ub = fix_param->patch_size / 2 - 1;
 
+		int data_it = 0;
+		Vector2i pos_it;
+
+		// start in left side of patch
+		int ind_e = pos[0] - fix_param->patch_size / 2;
+
+		//each row calculate
 		for (pos_it[1] = pos[1] + lb; pos_it[1] <= pos[1] + ub; ++pos_it[1])
 		{
-			img_a = img_e + pos_it[1] * image_param->tmp_w;
-			img_c = img_e + (pos_it[1] - 1) * image_param->tmp_w;
-			img_b = img_a - 1;
-			img_d = img_c - 1;
+			// get 4 neighbours of looking point a=right-up, b=left-up, c=right-down, d=left-down
+			int ind_a = ind_e  + pos_it[1] * image_param->tmp_w;
+			int ind_c = ind_e + (pos_it[1] - 1) * image_param->tmp_w;
+			int ind_b = ind_a - 1;
+			int ind_d = ind_c - 1;
 
-
-			for (pos_it[0] = pos[0] + lb; pos_it[0] <= pos[0] + ub; ++pos_it[0],
-				++tmp_in, ++img_a, ++img_b, ++img_c, ++img_d)
+			// in one line move to right - each column
+			for (pos_it[0] = pos[0] + lb; pos_it[0] <= pos[0] + ub; ++pos_it[0])
 			{
-				(*tmp_in) = we[0] * (*img_a) + we[1] * (*img_b) + we[2] * (*img_c) + we[3] * (*img_d);
+				pc->patch_diff.data()[data_it] = weight[3] * img_second->data()[ind_a] + weight[2] * img_second->data()[ind_b] + weight[1] * img_second->data()[ind_c] + weight[0] * img_second->data()[ind_d];
+				data_it++, ind_a++, ind_b++, ind_c++, ind_d++;
 			}
 		}
-		// PATCH NORMALIZATION
+
+		// patch normalization
 		if (fix_param->patch_normalization) { // Subtract Mean
-			tmp_in_e->array() -= (tmp_in_e->sum() / fix_param->num_points_patch);
+			pc->patch_diff.array() -= (pc->patch_diff.sum() / fix_param->num_points_patch);
 		}
 	}
-
 }
 
 
