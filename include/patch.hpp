@@ -9,18 +9,18 @@ namespace OpticalFlow
 {
 	typedef struct
 	{
-		bool hasconverged;
-		bool hasoptstarted;
+		bool converged;
+		bool optimal_started;
 
 		// reference/second patch 
-		Matrix<float, Eigen::Dynamic, 1> patch_diff; // image error to reference/second image
+		Matrix<float, Eigen::Dynamic, 1> patch_second; // image error to reference/second image
 
-		Matrix<float, 2, 2> Hes; // Hessian for optimization
-		Vector2f patch_in;  // point position
-		Vector2f p_iter; // warping vector u
-		Vector2f delta_p; // iteration update delta_u
-		Vector2f pt_iter; // result of W(x,u) patch position 
-		Vector2f pt_st; // start positions
+		Matrix<float, 2, 2> hessian; // Hessian for optimization
+		Vector2f patch_input_pos;  // point position
+		Vector2f u; // warping vector u
+		Vector2f delta_u; // iteration update delta_u
+		Vector2f patch_second_pos; // result of W(x,u) patch position 
+		Vector2f patch_second_start_pos; // start positions
 
 		int counter_iter = 0;
 		bool invalid = false;
@@ -38,14 +38,14 @@ namespace OpticalFlow
 
 		void inverse_search(Vector2f patch_in);
 
-		Eigen::Vector2f GetPointPos()  { return pc->pt_iter; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
+		Eigen::Vector2f GetPointPos()  { return pc->patch_second_pos; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
 		bool IsValid() { return (!pc->invalid); }
 		
-		Eigen::Vector2f* GetParam() { return &(pc->p_iter); }   // get current iteration parameters
+		Eigen::Vector2f* GetParam() { return &(pc->u); }   // get current iteration parameters
 
 	private:
 
-		void OptimizeStart(Vector2f patch_in);
+		void inverse_search_start(Vector2f patch_in);
 		void reset_patch();
 		void compute_hessian_matrix();
 		
@@ -55,7 +55,7 @@ namespace OpticalFlow
 		// Calculate image patch with linear interpolation on second image 
 		void get_patch_second_image();
 
-		Vector2f patch_ref; // reference point location (center of patch) paper: pixel x
+		Vector2f patch_first_pos; // reference point location (center of patch) paper: pixel x
 		Matrix<float, Dynamic, 1> patch_grad;
 		Matrix<float, Dynamic, 1> patch_grad_dx; 
 		Matrix<float, Dynamic, 1> patch_grad_dy;

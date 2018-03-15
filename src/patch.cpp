@@ -16,7 +16,7 @@ namespace OpticalFlow
 	Patch::Patch(image_parameters* image_param_in, fix_parameters* fix_param_in) : image_param(image_param_in), fix_param(fix_param_in)
 	{
 		pc = new patch_state;
-		pc->patch_diff.resize(fix_param->num_points_patch, 1);
+		pc->patch_second.resize(fix_param->num_points_patch, 1);
 
 		patch_grad.resize(fix_param->num_points_patch, 1);
 		patch_grad_dx.resize(fix_param->num_points_patch, 1);
@@ -34,7 +34,7 @@ namespace OpticalFlow
 		img_first_dx = img_first_dx_in;
 		img_first_dy = img_first_dy_in;
 
-		patch_ref = patch_ref_in;
+		patch_first_pos = patch_ref_in;
 		reset_patch();
 
 		// Get gradient for this reference patch
@@ -49,8 +49,8 @@ namespace OpticalFlow
 		Vector2i pos;
 		Vector2i pos_it;
 
-		pos[0] = round(patch_ref[0]) + image_param->img_padding;
-		pos[1] = round(patch_ref[1]) + image_param->img_padding;
+		pos[0] = round(patch_first_pos[0]) + image_param->img_padding;
+		pos[1] = round(patch_first_pos[1]) + image_param->img_padding;
 
 		int posxx = 0;
 
@@ -79,14 +79,14 @@ namespace OpticalFlow
 		// [ x^2 x*y ]
 		// [ x*y y^2 ]
 		// H = sum (S*S) for each pixel; S is partial derivate of image gradient
-		pc->Hes(0, 0) = (patch_grad_dx.array() * patch_grad_dx.array()).sum();
-		pc->Hes(0, 1) = (patch_grad_dx.array() * patch_grad_dy.array()).sum();
-		pc->Hes(1, 1) = (patch_grad_dy.array() * patch_grad_dy.array()).sum();
-		pc->Hes(1, 0) = pc->Hes(0, 1);
-		if (pc->Hes.determinant() == 0)
+		pc->hessian(0, 0) = (patch_grad_dx.array() * patch_grad_dx.array()).sum();
+		pc->hessian(0, 1) = (patch_grad_dx.array() * patch_grad_dy.array()).sum();
+		pc->hessian(1, 1) = (patch_grad_dy.array() * patch_grad_dy.array()).sum();
+		pc->hessian(1, 0) = pc->hessian(0, 1);
+		if (pc->hessian.determinant() == 0)
 		{
-			pc->Hes(0, 0) += 1e-10;
-			pc->Hes(1, 1) += 1e-10;
+			pc->hessian(0, 0) += 1e-10;
+			pc->hessian(1, 1) += 1e-10;
 		}
 	}
 
@@ -101,102 +101,103 @@ namespace OpticalFlow
 
 	void Patch::reset_patch()
 	{
-		pc->hasconverged = false;
-		pc->hasoptstarted = false;
+		pc->converged = false;
+		pc->optimal_started = false;
 
-		pc->pt_st = patch_ref;
-		pc->pt_iter = patch_ref;
+		pc->patch_second_start_pos = patch_first_pos;
+		pc->patch_second_pos = patch_first_pos;
 
-		pc->patch_in.setZero();
-		pc->p_iter.setZero();
-		pc->delta_p.setZero();
+		pc->patch_input_pos.setZero();
+		pc->u.setZero();
+		pc->delta_u.setZero();
 
 		pc->counter_iter = 0;
 		pc->invalid = false;
 	}
 
-	void Patch::OptimizeStart(Vector2f patch_in)
+	// Test if first move is valid. Test if inverse search optimal started
+	void Patch::inverse_search_start(Vector2f patch_in)
 	{
-		pc->patch_in = patch_in;
-		pc->p_iter = patch_in;
+		pc->patch_input_pos = patch_in;
+		pc->u = patch_in;
 
 		// Warp with u W(x,u) = (x+u,y+v)
-		pc->pt_iter = patch_ref + pc->p_iter;
+		pc->patch_second_pos = patch_first_pos + pc->u;
 
 		// save starting location, only needed for outlier check
-		pc->pt_st = pc->pt_iter;
+		pc->patch_second_start_pos = pc->patch_second_pos;
 
 		//Check if initial position is already invalid
-		if (pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb 
-			|| pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
+		if (pc->patch_second_pos[0] < image_param->tmp_lb || pc->patch_second_pos[1] < image_param->tmp_lb
+			|| pc->patch_second_pos[0] > image_param->tmp_ub_w || pc->patch_second_pos[1] > image_param->tmp_ub_h)
 		{
 			// if not
-			pc->hasconverged = true;
-			pc->patch_diff = patch_grad;
-			pc->hasoptstarted = true;
+			pc->converged = true;
+			pc->patch_second = patch_grad;
+			pc->optimal_started = true;
 		}
 		else
 		{
 			pc->counter_iter = 0; // reset iteration counter
-			pc->hasconverged = false;
+			pc->converged = false;
 
 			get_patch_second_image();
 			
 			// If max iteration, patch converged - we stop
 			if ((pc->counter_iter > fix_param->iterations)) {
-				pc->hasconverged = true;
+				pc->converged = true;
 			}
 
-			pc->hasoptstarted = true;
+			pc->optimal_started = true;
 			pc->invalid = false;
 		}
 	}
 
 	void Patch::inverse_search(Vector2f patch_in)
 	{
-		if (!pc->hasoptstarted)
+		if (!pc->optimal_started)
 		{
 			reset_patch();
-			OptimizeStart(patch_in);
+			inverse_search_start(patch_in);
 		}
 
 		// Optimize patch until convergence
-		while (!pc->hasconverged)
+		while (!pc->converged)
 		{
 			pc->counter_iter++;
 
 			// W(x,u+delta_u)
 			// Compute the sum, which includes the image difference (second image) multiplication with the image gradients
-			pc->delta_p[0] = (patch_grad_dx.array() * pc->patch_diff.array()).sum();
-			pc->delta_p[1] = (patch_grad_dy.array() * pc->patch_diff.array()).sum();
+			pc->delta_u[0] = (patch_grad_dx.array() * pc->patch_second.array()).sum();
+			pc->delta_u[1] = (patch_grad_dy.array() * pc->patch_second.array()).sum();
 
 			// Solve linear system Ax=b for delta u
 			// A is LU decomposition of Hessian matrix (eigen need this to solve - also can use LLT etc ...)
-			pc->delta_p = pc->Hes.lu().solve(pc->delta_p);
+			pc->delta_u = pc->hessian.lu().solve(pc->delta_u);
 
 			// Update warp parameter u: In optical flow this become u<-u-delta_u
-			pc->p_iter -= pc->delta_p; // update flow vector
+			pc->u = pc->u - pc->delta_u; // update flow vector
 		   
 			// Warp with warping vector u(u,v): W(x,u) = (x+u,y+v)
-			pc->pt_iter = patch_ref + pc->p_iter;
+			pc->patch_second_pos = patch_first_pos + pc->u;
 
 			// check if patch(es) moved too far from starting location, if yes, stop iteration and reset to starting location
-			if ((pc->pt_st - pc->pt_iter).norm() > fix_param->outlierthresh  // check if query patch moved more than >padval from starting location -> most likely outlier
+			if ((pc->patch_second_start_pos - pc->patch_second_pos).norm() > fix_param->outlierthresh  // check if query patch moved more than >padval from starting location -> most likely outlier
 				||
-				pc->pt_iter[0] < image_param->tmp_lb || pc->pt_iter[1] < image_param->tmp_lb ||
-				pc->pt_iter[0] > image_param->tmp_ub_w || pc->pt_iter[1] > image_param->tmp_ub_h)
+				pc->patch_second_pos[0] < image_param->tmp_lb || pc->patch_second_pos[1] < image_param->tmp_lb ||
+				pc->patch_second_pos[0] > image_param->tmp_ub_w || pc->patch_second_pos[1] > image_param->tmp_ub_h)
 			{
-				pc->p_iter = pc->patch_in; // reset
-				pc->pt_iter = patch_ref + pc->p_iter;    // for optical flow the point displacement and the parameter vector are equivalent
-				pc->hasconverged = true;
-				pc->hasoptstarted = true;
+				pc->u = pc->patch_input_pos; // reset
+				pc->patch_second_pos = patch_first_pos + pc->u;
+				pc->converged = true;
+				pc->optimal_started = true;
 			}
 
 			get_patch_second_image();
 			
 			// If max iteration, patch converged - we stop
 			if ((pc->counter_iter > fix_param->iterations)) {
-				pc->hasconverged = true;
+				pc->converged = true;
 			}
 		}
 	}
@@ -218,19 +219,19 @@ namespace OpticalFlow
 		// + b*(1-a)*I(l,k+1) <-weight[2] = b*(1-a)
 		// + a*b*I(l+1,k+1) <-weight[3] = a*b
 
-		float l = floor((pc->pt_iter)[0]);
-		float k = floor((pc->pt_iter)[1]);
+		float l = floor((pc->patch_second_pos)[0]);
+		float k = floor((pc->patch_second_pos)[1]);
 
-		float a = (pc->pt_iter)[0] - l;
-		float b = (pc->pt_iter)[1] - k;
+		float a = (pc->patch_second_pos)[0] - l;
+		float b = (pc->patch_second_pos)[1] - k;
 		weight[0] = (1 - a)*(1 - b);
 		weight[1] = a * (1 - b);
 		weight[2] = b * (1 - a);
 		weight[3] = a * b;
 
 		// Find nearest real position (x,y)
-		pos[0] = ceil((pc->pt_iter)[0] + .00001f) + image_param->img_padding;
-		pos[1] = ceil((pc->pt_iter)[1] + .00001f) + image_param->img_padding;
+		pos[0] = ceil((pc->patch_second_pos)[0] + .00001f) + image_param->img_padding;
+		pos[1] = ceil((pc->patch_second_pos)[1] + .00001f) + image_param->img_padding;
 
 		// lb and up for patch - for moving
 		int lb = -fix_param->patch_size / 2;
@@ -254,14 +255,14 @@ namespace OpticalFlow
 			// in one line move to right - each column
 			for (pos_it[0] = pos[0] + lb; pos_it[0] <= pos[0] + ub; ++pos_it[0])
 			{
-				pc->patch_diff.data()[data_it] = weight[3] * img_second->data()[ind_a] + weight[2] * img_second->data()[ind_b] + weight[1] * img_second->data()[ind_c] + weight[0] * img_second->data()[ind_d];
+				pc->patch_second.data()[data_it] = weight[3] * img_second->data()[ind_a] + weight[2] * img_second->data()[ind_b] + weight[1] * img_second->data()[ind_c] + weight[0] * img_second->data()[ind_d];
 				data_it++, ind_a++, ind_b++, ind_c++, ind_d++;
 			}
 		}
 
 		// patch normalization
 		if (fix_param->patch_normalization) { // Subtract Mean
-			pc->patch_diff.array() -= (pc->patch_diff.sum() / fix_param->num_points_patch);
+			pc->patch_second.array() -= (pc->patch_second.sum() / fix_param->num_points_patch);
 		}
 	}
 }
