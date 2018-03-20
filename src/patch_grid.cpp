@@ -105,56 +105,59 @@ namespace OpticalFlow
 		}
 	}
 
-	void PatchGrid::InitializeFromCoarserOF(const float * flow_prev)
+	void PatchGrid::patch_init_from_prev_flow(float * flow_prev)
 	{
 		for (int ip = 0; ip < num_all_patch; ++ip)
 		{
-			int x = floor(patch_reference[ip][0] / 2); // better, but slower: use bil. interpolation here
+			int x = floor(patch_reference[ip][0] / 2);
 			int y = floor(patch_reference[ip][1] / 2);
-			int i = y*(image_param->width / 2) + x;
+			int i = y * (image_param->width / 2) + x;
 
 			patch_init[ip](0) = flow_prev[2 * i] * 2;
 			patch_init[ip](1) = flow_prev[2 * i + 1] * 2;
 		}
 	}
 
-	void PatchGrid::AggregateFlowDense(float *flowout) const
+	void PatchGrid::densification_and_create_dance_flow(float *dense_flow)
 	{
-		float* we = new float[image_param->width * image_param->height];
+		float* weight = new float[image_param->width * image_param->height];
 
-		memset(flowout, 0, sizeof(float) * (2 * image_param->width * image_param->height));
-		memset(we, 0, sizeof(float) * (image_param->width * image_param->height));
+		memset(dense_flow, 0, sizeof(float) * (2 * image_param->width * image_param->height)); // Fill with 0
+		memset(dense_flow, 0, sizeof(float) * (image_param->width * image_param->height)); // Fill with 0
 
+		float intensity_difference = 0.5f;  // denotes the intensity difference between template patch and warped image at this pixel
+
+		// update displacements vectors u
+		// create a dense flow in each pixel by applying weighted averaging to all patches overlapping at x in the reference image
 		for (int ip = 0; ip < num_all_patch; ++ip)
 		{
-
 			if (patches[ip]->IsValid())
 			{
-				const Eigen::Vector2f* fl = patches[ip]->GetParam(); // flow displacement of this patch
-				Eigen::Vector2f flnew;
+				Vector2f* u = patches[ip]->GetParam(); // flow displacement of this patch
+				Vector2f new_u; // new flow
 
 				int lb = -fix_param->patch_size / 2;
 				int ub = fix_param->patch_size / 2 - 1;
 
+				// Inside a patch
 				for (int y = lb; y <= ub; ++y)
 				{
 					for (int x = lb; x <= ub; ++x)
 					{
-						int yt = (y + patch_reference[ip][1]);
 						int xt = (x + patch_reference[ip][0]);
+						int yt = (y + patch_reference[ip][1]);
 
+						// if inside image
 						if (xt >= 0 && yt >= 0 && xt < image_param->width && yt < image_param->height)
 						{
-
 							int i = yt*image_param->width + xt;
 
-							float absw = 1.0f / (float)fix_param->minerrval;
+							// Us(x) = sum( (1/2)*u) // 1/2 for pixel averaging weight
+							new_u = (*u) * intensity_difference;
+							weight[i] += intensity_difference; // for pixel averaging weight
 
-							flnew = (*fl) * absw;
-							we[i] += absw;
-
-							flowout[2 * i] += flnew[0];
-							flowout[2 * i + 1] += flnew[1];
+							dense_flow[2 * i] += new_u[0];
+							dense_flow[2 * i + 1] += new_u[1];
 						}
 					}
 				}
@@ -167,14 +170,14 @@ namespace OpticalFlow
 			for (int xi = 0; xi < image_param->width; ++xi)
 			{
 				int i = yi*image_param->width + xi;
-				if (we[i]>0)
+				if (weight[i]>0)
 				{    
-					flowout[2 * i] /= we[i];
-					flowout[2 * i + 1] /= we[i];
+					dense_flow[2 * i] /= weight[i];
+					dense_flow[2 * i + 1] /= weight[i];
 				}
 			}
 		}
 
-		delete[] we;
+		delete[] weight;
 	}
 }

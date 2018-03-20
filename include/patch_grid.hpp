@@ -18,9 +18,9 @@ namespace OpticalFlow
 
 		void init_grid(float* img_first_in, float* img_first_dx_in, float* img_first_dy_in);
 		void set_target_image(float* img_second_in, float* img_second_dx_in, float* img_second_dy_in);
-		void InitializeFromCoarserOF(const float * flow_prev);
+		void patch_init_from_prev_flow(float * flow_prev);
 
-		void AggregateFlowDense(float *flowout) const;
+		void densification_and_create_dance_flow(float *dense_flow);
 
 		// Optimizes grid to convergence of each patch
 		void inverse_search();

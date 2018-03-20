@@ -16,18 +16,18 @@ using namespace Eigen;
 
 namespace OpticalFlow
 {
-
 	OpticalFlowClass::OpticalFlowClass(
 		float** img_first_in, float** img_first_dx_in, float** img_first_dy_in,
 		float ** img_second_in, float ** img_second_dx_in, float ** img_second_dy_in,
 		int img_padding_in,
-		float * outflow,
+		float * out_flow,
 		int width_in, int height_in,
 		int coarsest_scale, int finest_scale,
 		int iterations,
 		int patch_size,
 		float patch_overlap,
-		bool patch_normalization)
+		bool patch_normalization,
+		bool draw_grid)
 		: img_first(img_first_in), img_first_dx(img_first_dx_in), img_first_dy(img_first_dy_in), img_second(img_second_in), img_second_dx(img_second_dx_in), img_second_dy(img_second_dy_in)
 	{
 		fix_param.patch_size = patch_size;  // center pixel (p_samp_s/2, p_samp_s/2)
@@ -66,6 +66,7 @@ namespace OpticalFlow
 		// Main loop Operate over scales, coarsext to finest
 		for (int scale = fix_param.coarsest_scale; scale >= fix_param.finest_scale; --scale)
 		{
+			cout << "scale: " << scale << endl;
 			int s = scale - fix_param.finest_scale;
 
 			// Initialize grid (Step 1 in Algorithm 1 of paper)
@@ -75,7 +76,7 @@ namespace OpticalFlow
 			// Initialization from previous scale, or to zero at first iteration. (Step 2 in Algorithm 1 of paper)                                          
 			if (scale < fix_param.coarsest_scale)
 			{
-				grids[s]->InitializeFromCoarserOF(flows[s + 1]); // initialize from flow at previous coarser scale
+				grids[s]->patch_init_from_prev_flow(flows[s + 1]); // initialize from flow at previous coarser scale
 			}
 
 			// Dense Inverse Search. (Step 3 in Algorithm 1 of paper)                                          
@@ -83,12 +84,13 @@ namespace OpticalFlow
 
 			// Densification. (Step 4 in Algorithm 1 of paper)                                                                    
 			float *tmp_ptr = flows[s];
-			if (scale == fix_param.finest_scale)
-				tmp_ptr = outflow;
-
-			grids[s]->AggregateFlowDense(tmp_ptr);
+			if (scale == fix_param.finest_scale) {
+				tmp_ptr = out_flow;
+			}
+			grids[s]->densification_and_create_dance_flow(tmp_ptr);
 
 			// Display Grid on current scale
+			if(draw_grid)
 			{
 				float sc_fct_tmp = pow(2, scale); // upscale factor
 
@@ -99,26 +101,29 @@ namespace OpticalFlow
 				img_ao_mat.convertTo(outimg, CV_8UC1);
 				cvtColor(outimg, outimg, CV_GRAY2RGB);
 				resize(outimg, outimg, Size(), sc_fct_tmp, sc_fct_tmp, INTER_NEAREST);
-				for (int i = 0; i < grids[s]->get_num_all_patch(); ++i)
-					DisplayDrawPatchBoundary(outimg, grids[s]->GetRefPatchPos(i), sc_fct_tmp);
+
+				// draw borders 
+				for (int i = 0; i < grids[s]->get_num_all_patch(); ++i) {
+					draw_patch_borders(outimg, grids[s]->GetRefPatchPos(i), sc_fct_tmp);
+				}
 
 				for (int i = 0; i < grids[s]->get_num_all_patch(); ++i)
 				{
-					// Show displacement vector
-					const Vector2f pt_ref = grids[s]->GetRefPatchPos(i);
-					const Vector2f pt_ret = grids[s]->GetQuePatchPos(i);
+					// Ssow displacement vector
+					Vector2f pt_ref = grids[s]->GetRefPatchPos(i);
+					Vector2f pt_ret = grids[s]->GetQuePatchPos(i);
 
 					Vector2f pta, ptb;
 					line(outimg, Point((pt_ref[0] + .5)*sc_fct_tmp, (pt_ref[1] + .5)*sc_fct_tmp), Point((pt_ret[0] + .5)*sc_fct_tmp, (pt_ret[1] + .5)*sc_fct_tmp), Scalar(0, 255, 0), 2);
 				}
-				namedWindow("Img_ao", WINDOW_AUTOSIZE);
-				imshow("Img_ao", outimg);
+
+				namedWindow("grid", WINDOW_AUTOSIZE);
+				imshow("grid", outimg);
 				waitKey(30);
 			}
-		}
+		} // end of main loop
 
-
-		// Clean up
+		// clean up
 		for (int sl = fix_param.coarsest_scale; sl >= fix_param.finest_scale; --sl)
 		{
 			delete[] flows[sl - fix_param.finest_scale];
@@ -126,7 +131,7 @@ namespace OpticalFlow
 		}
 	}
 
-	void OpticalFlowClass::DisplayDrawPatchBoundary(Mat img, Vector2f pt, float sc)
+	void OpticalFlowClass::draw_patch_borders(Mat img, Vector2f pt, float sc)
 	{
 		//line(img, Point((pt[0] + .5)*sc, (pt[1] + .5)*sc), Point((pt[0] + .5)*sc, (pt[1] + .5)*sc), Scalar(255, 0, 0), 4);
 		//circle(img, Point((pt[0])*sc, (pt[1])*sc), (int)(sc*((double)op.steps/4.0)), Scalar(255, 0, 0), CV_FILLED);
@@ -137,7 +142,6 @@ namespace OpticalFlow
 		line(img, Point(((pt[0] + ub) + .5)*sc, ((pt[1] + lb) + .5)*sc), Point(((pt[0] + ub) + .5)*sc, ((pt[1] + ub) + .5)*sc), Scalar(0, 0, 255), 1);
 		line(img, Point(((pt[0] + ub) + .5)*sc, ((pt[1] + ub) + .5)*sc), Point(((pt[0] + lb) + .5)*sc, ((pt[1] + ub) + .5)*sc), Scalar(0, 0, 255), 1);
 		line(img, Point(((pt[0] + lb) + .5)*sc, ((pt[1] + ub) + .5)*sc), Point(((pt[0] + lb) + .5)*sc, ((pt[1] + lb) + .5)*sc), Scalar(0, 0, 255), 1);
-		
 	}
 }
 
