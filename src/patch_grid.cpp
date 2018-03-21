@@ -131,9 +131,9 @@ namespace OpticalFlow
 		// create a dense flow in each pixel by applying weighted averaging to all patches overlapping at x in the reference image
 		for (int ip = 0; ip < num_all_patch; ++ip)
 		{
-			if (patches[ip]->IsValid())
+			if (patches[ip]->is_valid())
 			{
-				Vector2f* u = patches[ip]->GetParam(); // flow displacement of this patch
+				Vector2f* u = patches[ip]->get_u_vector(); // flow displacement of this patch
 				Vector2f new_u; // new flow
 
 				int lb = -fix_param->patch_size / 2;

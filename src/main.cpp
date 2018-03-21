@@ -90,7 +90,9 @@ int main(int argc, char** argv )
 			return -1;
 		}
 
-		/*cv::Mat flowinit;
+		/*
+		// Read and write .flo files and draw optical flow
+		cv::Mat flowinit;
 		flowinit.create(img_first_mat.size().height, img_first_mat.size().width, CV_32FC2);
 		ReadFlowFile(flowinit, "frame_0001.flo");
 		Mat dst;
@@ -98,6 +100,7 @@ int main(int argc, char** argv )
 		SaveFlowFile(flowinit, "frame_0002.flo");
 		imshow("flowinit", dst);
 		waitKey(30);*/
+
 		// PARAMETERS
 		cv::Size sz = img_first_mat.size();
 		int width_org = sz.width;   // unpadded original image size
@@ -147,7 +150,6 @@ int main(int argc, char** argv )
 		// Run optical flow algorithm
 		float sc_fct = pow(2, finest_scale);
 		cv::Mat flowout(sz.height / sc_fct, sz.width / sc_fct, CV_32FC2); // Optical Flow
-
 
 		OpticalFlow::OpticalFlowClass ofc(img_first_pyr, img_first_dx_pyr, img_first_dy_pyr,
 			img_second_pyr, img_second_dx_pyr, img_second_dy_pyr,

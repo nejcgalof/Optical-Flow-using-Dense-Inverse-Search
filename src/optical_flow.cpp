@@ -104,17 +104,17 @@ namespace OpticalFlow
 
 				// draw borders 
 				for (int i = 0; i < grids[s]->get_num_all_patch(); ++i) {
-					draw_patch_borders(outimg, grids[s]->GetRefPatchPos(i), sc_fct_tmp);
+					draw_patch_borders(outimg, grids[s]->get_patch_ref_pos(i), sc_fct_tmp);
 				}
 
 				for (int i = 0; i < grids[s]->get_num_all_patch(); ++i)
 				{
-					// Ssow displacement vector
-					Vector2f pt_ref = grids[s]->GetRefPatchPos(i);
-					Vector2f pt_ret = grids[s]->GetQuePatchPos(i);
+					// Show displacement vector
+					Vector2f pt_ref = grids[s]->get_patch_ref_pos(i);
+					Vector2f pt_query = grids[s]->get_patch_query_pos(i);
 
 					Vector2f pta, ptb;
-					line(outimg, Point((pt_ref[0] + .5)*sc_fct_tmp, (pt_ref[1] + .5)*sc_fct_tmp), Point((pt_ret[0] + .5)*sc_fct_tmp, (pt_ret[1] + .5)*sc_fct_tmp), Scalar(0, 255, 0), 2);
+					line(outimg, Point((pt_ref[0] + .5)*sc_fct_tmp, (pt_ref[1] + .5)*sc_fct_tmp), Point((pt_query[0] + .5)*sc_fct_tmp, (pt_query[1] + .5)*sc_fct_tmp), Scalar(0, 255, 0), 2);
 				}
 
 				namedWindow("grid", WINDOW_AUTOSIZE);
@@ -144,7 +144,6 @@ namespace OpticalFlow
 		line(img, Point(((pt[0] + lb) + .5)*sc, ((pt[1] + ub) + .5)*sc), Point(((pt[0] + lb) + .5)*sc, ((pt[1] + lb) + .5)*sc), Scalar(0, 0, 255), 1);
 	}
 }
-
 
 
 

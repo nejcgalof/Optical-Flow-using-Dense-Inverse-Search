@@ -1,5 +1,5 @@
 #pragma once
-#include "optical_flow.hpp" // For camera intrinsic and opt. parameter struct
+#include "optical_flow.hpp"
 
 using namespace std;
 using namespace cv;
@@ -13,7 +13,7 @@ namespace OpticalFlow
 		bool optimal_started;
 
 		// reference/second patch 
-		Matrix<float, Eigen::Dynamic, 1> patch_second; // image error to reference/second image
+		Matrix<float, Dynamic, 1> patch_second; // image error to reference/second image
 
 		Matrix<float, 2, 2> hessian; // Hessian for optimization
 		Vector2f patch_input_pos;  // point position
@@ -38,10 +38,9 @@ namespace OpticalFlow
 
 		void inverse_search(Vector2f patch_in);
 
-		Eigen::Vector2f GetPointPos()  { return pc->patch_second_pos; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
-		bool IsValid() { return (!pc->invalid); }
-		
-		Eigen::Vector2f* GetParam() { return &(pc->u); }   // get current iteration parameters
+		Vector2f get_patch_pos()  { return pc->patch_second_pos; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
+		bool is_valid() { return (!pc->invalid); }
+		Vector2f* get_u_vector() { return &(pc->u); } 
 
 	private:
 

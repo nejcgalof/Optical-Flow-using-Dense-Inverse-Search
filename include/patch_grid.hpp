@@ -26,9 +26,8 @@ namespace OpticalFlow
 		void inverse_search();
 
 		int get_num_all_patch() { return num_all_patch; }
-		Vector2f GetRefPatchPos(int i) { return patch_reference[i]; } // Get reference  patch position
-		Vector2f GetQuePatchPos(int i) { return patches[i]->GetPointPos(); } // Get target/query patch position
-		Vector2f GetQuePatchDis(int i) { return patch_reference[i] - patches[i]->GetPointPos(); } // Get query patch displacement from reference patch
+		Vector2f get_patch_ref_pos(int i) { return patch_reference[i]; } // Get reference patch position
+		Vector2f get_patch_query_pos(int i) { return patches[i]->get_patch_pos(); } // Get target/query patch position
 
 	private:
 
