@@ -59,27 +59,57 @@ void CreateFolder(const char* path)
 
 int main(int argc, char** argv )
 {
-	for (int img_i = 1; img_i < 50; img_i++) {
+	// PARAMETERS INPUT
+	string folder = "alley_1";
+	int start_num_img = 1;
+	int end_num_img = 50;
+	int iterations = 1000; // Max. iterations
+	int patch_size = 8; // Rectangular patch size in (pixel)
+	const int coarsest_scale = 3; // Coarsest scale in multi-scale pyramid
+	int finest_scale = 0; // Finest scale in multi-scale pyramide
+	float patch_overlap = 0.7; // Patch overlap on each scale (percent) - 0.7
+	bool patch_normalization = true; // Mean - normalize patches
+	bool draw_grid = false; // draw patch grid and flows
+	if (argc == 1) {
+		// just skip all settings
+	}
+	else if (argc == 4) {
+		folder = argv[1];
+		start_num_img = atoi(argv[2]);
+		end_num_img = atoi(argv[3]);
+	}
+	else if(argc==11){
+		folder = argv[1];
+		start_num_img = atoi(argv[2]);
+		end_num_img = atoi(argv[3]);
+		iterations = atoi(argv[4]);
+		patch_size = atoi(argv[5]);
+		finest_scale = atoi(argv[7]);
+		const_cast<int&>(coarsest_scale) = atoi(argv[6]);
+		patch_overlap = atof(argv[8]);
+		patch_normalization = atoi(argv[9]);
+		draw_grid = atoi(argv[10]);
+	}
+	else {
+		cout << "Not good parameters!" << endl;
+		cout << "1. Run without parameters with default parameters (alley_1) from 1 to 50" << endl;
+		cout << "2. Set folder and images with default parameters:" << endl;
+		cout << "OpticalFlow.exe folder start_num_image end_num_image" << endl;
+		cout << "3. Add full settings" << endl;
+		cout << "OpticalFlow.exe folder start_num_image end_num_image max_iter patch_size coarsest_scale finest_scale patch_overlap patch_norm draw_grid"<< endl;
+		return 0;
+	}
+	for (int img_i = start_num_img; img_i < end_num_img; img_i++) {
 
-		// PARAMETERS INPUT
-		string folder = "alley_1/";
-		string write_folder = "OF_" + folder;
+		string write_folder = "OF_" + folder+"/";
 		CreateFolder(write_folder.c_str());
 		string first = std::to_string(img_i);
 		string second = std::to_string(img_i+1);
-		string first_image = folder+"frame_" + std::string(4 - first.length(), '0').append(first) + ".png";
-		string second_image = folder+"frame_" + std::string(4 - second.length(), '0').append(second) + ".png";
+		string first_image = folder+"/frame_" + std::string(4 - first.length(), '0').append(first) + ".png";
+		string second_image = folder+"/frame_" + std::string(4 - second.length(), '0').append(second) + ".png";
 		cout << "start " << first_image << endl;
 		const char *imgfile_first = first_image.c_str();
 		const char *imgfile_second = second_image.c_str();
-
-		int iterations = 1000; // Max. iterations
-		int patch_size = 8; // Rectangular patch size in (pixel)
-		const int coarsest_scale = 3; // Coarsest scale in multi-scale pyramid
-		int finest_scale = 0; // Finest scale in multi-scale pyramide
-		float patch_overlap = 0.7; // Patch overlap on each scale (percent) - 0.7
-		bool patch_normalization = true; // Mean - normalize patches
-		bool draw_grid = false; // draw patch grid and flows
 
 		cv::Mat img_first_mat, img_second_mat, img_tmp;
 		img_first_mat = cv::imread(imgfile_first, CV_LOAD_IMAGE_GRAYSCALE);   // Read the file

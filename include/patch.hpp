@@ -38,7 +38,7 @@ namespace OpticalFlow
 
 		void inverse_search(Vector2f patch_in);
 
-		Vector2f get_patch_pos()  { return pc->patch_second_pos; }  // get current iteration patch position (in this frame's opposite camera for OF, Depth)
+		Vector2f get_patch_pos()  { return pc->patch_second_pos; }  // get current iteration patch position
 		bool is_valid() { return (!pc->invalid); }
 		Vector2f* get_u_vector() { return &(pc->u); } 
 
